@@ -16,6 +16,19 @@ if let idx = CommandLine.arguments.firstIndex(of: "--render-siamese-preview"),
     exit(0)
 }
 
+// Headless state-machine test: simulate fast typing, then silence, verify fried timing.
+if CommandLine.arguments.contains("--test-overload") {
+    testOverloadStateMachine()
+    exit(0)
+}
+
+// Support headless overload-face preview (strain + dazed/smoke)
+if let idx = CommandLine.arguments.firstIndex(of: "--render-overload-preview"),
+   idx + 1 < CommandLine.arguments.count {
+    renderOverloadPreview(to: CommandLine.arguments[idx + 1])
+    exit(0)
+}
+
 // Support headless Live-style animated frame sequence export (for GIF & MP4 generation)
 if let idx = CommandLine.arguments.firstIndex(of: "--render-demos"),
    idx + 1 < CommandLine.arguments.count {
@@ -199,6 +212,208 @@ func renderPreviewSheet(to path: String, forceSiamese: Bool = false) {
         NSAttributedString(string: label, attributes: attrs).draw(at: CGPoint(x: 14, y: 11))
         NSGraphicsContext.restoreGraphicsState()
 
+        ctx.restoreGState()
+    }
+
+    guard let cgImg = ctx.makeImage() else { return }
+    let rep = NSBitmapImageRep(cgImage: cgImg)
+    if let png = rep.representation(using: .png, properties: [:]) {
+        try? png.write(to: URL(fileURLWithPath: path))
+    }
+}
+
+func testOverloadStateMachine() {
+    let p = CatPhysics()
+    let win = CGRect(x: 0, y: 0, width: 360, height: 320)
+    var t: CFTimeInterval = 100
+    var lastKeyT: CFTimeInterval = 0
+    func advance(_ seconds: Double, keys: Int = 0) {
+        let steps = Int(seconds * 60)
+        for i in 0..<steps {
+            t += 1.0 / 60.0
+            // inject keys evenly across this slice
+            if keys > 0, i % max(1, steps / keys) == 0 {
+                p.triggerKeyDown(.j, at: t)
+                lastKeyT = t
+            }
+            var scripted = ScriptedFrameInput(
+                now: t, activeKeys: [], orderedKeys: [],
+                mouseScreenPos: .zero, mouseVelocity: .zero,
+                leftMouseDown: false, rightMouseDown: false,
+                lastMouseMoveTime: 0, lastMouseClickTime: 0,
+                lastKeyActivityTime: lastKeyT
+            )
+            p.step(dt: 1.0 / 60.0, windowFrameInScreen: win, scripted: scripted)
+        }
+    }
+
+    print("T0 idle: fried=\(p.isFried) strain=\(String(format:"%.2f", p.strain))")
+    // Burst of ~10 keys/sec for 1.2s
+    advance(1.2, keys: 12)
+    print("T1 after fast burst: strain=\(String(format:"%.2f", p.strain)) armed(derived)")
+    // Stop typing
+    advance(0.5)
+    print("T2 0.5s after stop: fried=\(p.isFried) left=\(String(format:"%.2f", p.friedTimeLeft))")
+    // advance 1.0 more -> still within 3s
+    advance(1.0)
+    print("T3 1.5s after stop: fried=\(p.isFried) left=\(String(format:"%.2f", p.friedTimeLeft))")
+    // advance 2.2 -> past 3s from trigger, should auto-end
+    advance(2.2)
+    print("T4 3.7s after stop: fried=\(p.isFried) left=\(String(format:"%.2f", p.friedTimeLeft)) (expect false)")
+
+    // Second scenario: mouse move打断
+    let p2 = CatPhysics()
+    var t2: CFTimeInterval = 100
+    var lastKeyT2: CFTimeInterval = 0
+    func advance2(_ seconds: Double, keys: Int = 0, mouseVel: CGVector = .zero, mouseMoveNow: Bool = false) {
+        let steps = Int(seconds * 60)
+        for i in 0..<steps {
+            t2 += 1.0 / 60.0
+            if keys > 0, i % max(1, steps / keys) == 0 { p2.triggerKeyDown(.k, at: t2); lastKeyT2 = t2 }
+            let mmt = mouseMoveNow ? t2 : 0
+            var s = ScriptedFrameInput(
+                now: t2, activeKeys: [], orderedKeys: [],
+                mouseScreenPos: .zero, mouseVelocity: mouseVel,
+                leftMouseDown: false, rightMouseDown: false,
+                lastMouseMoveTime: mmt, lastMouseClickTime: 0,
+                lastKeyActivityTime: lastKeyT2
+            )
+            p2.step(dt: 1.0 / 60.0, windowFrameInScreen: win, scripted: s)
+        }
+    }
+    advance2(1.2, keys: 12)
+    advance2(0.5)
+    print("P2 before mouse: fried=\(p2.isFried)")
+    advance2(0.1, mouseVel: CGVector(dx: 200, dy: 0), mouseMoveNow: true)
+    print("P2 after mouse move: fried=\(p2.isFried) (expect false)")
+
+    // Third: a key press during fried ends it immediately.
+    let p3 = CatPhysics()
+    var t3: CFTimeInterval = 200
+    var lk3: CFTimeInterval = 0
+    func advance3(_ seconds: Double, keys: Int = 0) {
+        let steps = Int(seconds * 60)
+        for i in 0..<steps {
+            t3 += 1.0 / 60.0
+            if keys > 0, i % max(1, steps / keys) == 0 { p3.triggerKeyDown(.m, at: t3); lk3 = t3 }
+            var s = ScriptedFrameInput(
+                now: t3, activeKeys: [], orderedKeys: [],
+                mouseScreenPos: .zero, mouseVelocity: .zero,
+                leftMouseDown: false, rightMouseDown: false,
+                lastMouseMoveTime: 0, lastMouseClickTime: 0,
+                lastKeyActivityTime: lk3
+            )
+            p3.step(dt: 1.0 / 60.0, windowFrameInScreen: win, scripted: s)
+        }
+    }
+    advance3(1.2, keys: 12)
+    advance3(0.5)
+    print("P3 before key: fried=\(p3.isFried)")
+    p3.triggerKeyDown(.x, at: t3 + 0.01)
+    print("P3 after key press: fried=\(p3.isFried) (expect false)")
+
+    // Fourth: slow steady typing (~3 keys/sec) must NOT trigger.
+    let p4 = CatPhysics()
+    var t4: CFTimeInterval = 300
+    var lk4: CFTimeInterval = 0
+    for _ in 0..<240 {
+        t4 += 1.0 / 60.0
+        // one key every ~0.38s
+        if Int(t4 * 100) % 38 == 0 { p4.triggerKeyDown(.n, at: t4); lk4 = t4 }
+        var s = ScriptedFrameInput(
+            now: t4, activeKeys: [], orderedKeys: [],
+            mouseScreenPos: .zero, mouseVelocity: .zero,
+            leftMouseDown: false, rightMouseDown: false,
+            lastMouseMoveTime: 0, lastMouseClickTime: 0,
+            lastKeyActivityTime: lk4
+        )
+        p4.step(dt: 1.0 / 60.0, windowFrameInScreen: win, scripted: s)
+    }
+    print("P4 slow typing 4s: fried=\(p4.isFried) strain=\(String(format:"%.2f", p4.strain)) (expect false)")
+}
+
+func renderOverloadPreview(to path: String) {
+    let cellW = 360
+    let cellH = 320
+    let scale = 2
+    let cols = 4
+    let totalW = cellW * cols * scale
+    let totalH = cellH * scale
+
+    let cs = CGColorSpaceCreateDeviceRGB()
+    guard let ctx = CGContext(
+        data: nil, width: totalW, height: totalH,
+        bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else { return }
+
+    ctx.translateBy(x: 0, y: CGFloat(totalH))
+    ctx.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
+
+    let bgColors = [
+        NSColor(calibratedRed: 0.72, green: 0.74, blue: 0.71, alpha: 1.0).cgColor,
+        NSColor(calibratedRed: 0.54, green: 0.56, blue: 0.55, alpha: 1.0).cgColor
+    ] as CFArray
+    if let grad = CGGradient(colorsSpace: cs, colors: bgColors, locations: [0, 1]) {
+        ctx.drawLinearGradient(grad, start: .zero, end: CGPoint(x: cellW * cols, y: cellH), options: [])
+    }
+
+    let scenarios: [(String, (CatPhysics) -> Void)] = [
+        ("Tier 1 - slight effort", { p in
+            p.previewSetOverload(strain: 0.52, fried: false)
+            p.leftPaw.x.value = 150; p.leftPaw.y.value = 210
+            p.rightPaw.x.value = 215; p.rightPaw.y.value = 205
+            p.headPitch.value = 0.15; p.headOffsetY.value = 3
+            for _ in 0..<3 { p.triggerKeyDown(.a) }
+            for i in p.floatingKeycaps.indices { p.floatingKeycaps[i].age = 0.2 }
+        }),
+        ("Tier 2 - really trying", { p in
+            p.previewSetOverload(strain: 0.74, fried: false)
+            p.leftPaw.x.value = 150; p.leftPaw.y.value = 210
+            p.rightPaw.x.value = 215; p.rightPaw.y.value = 205
+            p.headPitch.value = 0.19; p.headOffsetY.value = 4
+            for _ in 0..<4 { p.triggerKeyDown(.a) }
+            for i in p.floatingKeycaps.indices { p.floatingKeycaps[i].age = 0.2 }
+        }),
+        ("Tier 3 - ALL OUT", { p in
+            p.previewSetOverload(strain: 0.97, fried: false)
+            p.leftPaw.x.value = 150; p.leftPaw.y.value = 210
+            p.rightPaw.x.value = 215; p.rightPaw.y.value = 205
+            p.headPitch.value = 0.24; p.headOffsetY.value = 5
+            for _ in 0..<5 { p.triggerKeyDown(.a) }
+            for i in p.floatingKeycaps.indices { p.floatingKeycaps[i].age = 0.2 }
+        }),
+        ("Fried - line smoke (3s)", { p in
+            p.previewSetOverload(strain: 0, fried: true, timeLeft: 2.6)
+            p.headPitch.value = 0.30
+            p.headOffsetY.value = 6
+            p.earFold.value = 0.7
+            p.bodySquash.value = 0.94
+        })
+    ]
+
+    for (index, (label, configure)) in scenarios.enumerated() {
+        let physics = CatPhysics()
+        configure(physics)
+        ctx.saveGState()
+        ctx.translateBy(x: CGFloat(index * cellW), y: 0)
+
+        ctx.setStrokeColor(NSColor(calibratedWhite: 1.0, alpha: 0.25).cgColor)
+        ctx.setLineWidth(1.0)
+        ctx.stroke(CGRect(x: 0.5, y: 0.5, width: CGFloat(cellW) - 1, height: CGFloat(cellH) - 1))
+
+        CatRenderer.draw(in: ctx, physics: physics, showPermissionPill: false)
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        ctx.setFillColor(NSColor(calibratedWhite: 0.08, alpha: 0.72).cgColor)
+        ctx.fill(CGRect(x: 8, y: 8, width: 230, height: 22))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: true)
+        NSAttributedString(string: label, attributes: attrs).draw(at: CGPoint(x: 14, y: 11))
+        NSGraphicsContext.restoreGraphicsState()
         ctx.restoreGState()
     }
 

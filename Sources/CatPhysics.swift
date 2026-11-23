@@ -158,6 +158,16 @@ struct MusicNoteParticle {
     let scale: CGFloat
 }
 
+/// Soft smoke wisp rising from the head when the cat is mentally fried from typing too fast.
+struct SmokePuff {
+    var position: CGPoint
+    var velocity: CGPoint
+    var age: CGFloat = 0
+    let lifetime: CGFloat
+    let radius: CGFloat
+    let seed: CGFloat
+}
+
 struct ScriptedFrameInput {
     var now: CFTimeInterval
     var activeKeys: Set<PhysicalKey>
@@ -228,6 +238,19 @@ final class CatPhysics {
     private var lastNoteTime: CFTimeInterval = 0
     private var noteGlyphIndex = 0
 
+    // MARK: - Overload easter egg (typing too fast -> strain -> 3s fried/dazed with smoke)
+    // Strain builds from a short rolling keystroke window; when it peaks and typing stops,
+    // the cat "short-circuits": dazed spiraled eyes + smoke for 3s, until a key or mouse move.
+    private var keyTimes: [CFTimeInterval] = []
+    private var lastFastKeyTime: CFTimeInterval = 0
+    private var overloadArmed = false               // a genuine fast-typing burst happened
+    private(set) var strain: CGFloat = 0            // 0..1 effort/straining face while typing fast
+    private(set) var isFried = false                // dazed + smoke state active
+    private(set) var friedTimeLeft: CGFloat = 0     // counts down from 3.0
+    private var friedStartedAt: CFTimeInterval = 0
+    private var smokeCooldown: CGFloat = 0
+    private(set) var smokePuffs: [SmokePuff] = []
+
     // Time & blink
     private(set) var time: CGFloat = 0
     private(set) var tailPhase: CGFloat = 0
@@ -273,12 +296,37 @@ final class CatPhysics {
         petBodyIntensity > 0.35 && !isHappyClosedEyes
     }
 
+    /// Effort face: typing furiously — furrowed brow, narrowed determined eyes, gritted teeth.
+    var isStraining: Bool {
+        strain > 0.42 && !isFried && !isHappyClosedEyes
+    }
+
+    /// Three escalating effort tiers while straining:
+    /// 1 = slightly exerting, 2 = really trying, 3 = all-out / about to explode.
+    /// 0 when not straining. Thresholds sit inside the straining strain band (0.42...1.0).
+    var strainTier: Int {
+        guard isStraining else { return 0 }
+        if strain < 0.64 { return 1 }
+        if strain < 0.85 { return 2 }
+        return 3
+    }
+
+    /// Dazed/fried face takes priority over every other expression and over music notes.
+    var isDazed: Bool { isFried }
+
     // MARK: - Input Hooks
 
     func triggerKeyDown(_ key: PhysicalKey, at timestamp: CFTimeInterval? = nil) {
         let now = timestamp ?? CACurrentMediaTime()
         let vk = key.visualKey
         keyGlow[vk] = 1.0
+
+        // Any fresh keystroke snaps the cat out of the dazed/fried state.
+        if isFried { endFried(now: now) }
+
+        // Feed the short rolling window used to measure typing speed.
+        keyTimes.append(now)
+        if keyTimes.count > 64 { keyTimes.removeFirst(keyTimes.count - 64) }
 
         let pt = KeyboardLayout.canvasPoint(for: vk)
         lastTypedPoint = pt
@@ -410,6 +458,42 @@ final class CatPhysics {
         let curLastMouseMove = scripted?.lastMouseMoveTime ?? engine.lastMouseMoveTime
         let curLastMouseClick = scripted?.lastMouseClickTime ?? engine.lastMouseClickTime
         let curLastKeyTime = scripted?.lastKeyActivityTime ?? engine.lastKeyActivityTime
+
+        // 2a. Fast-typing overload state machine.
+        // Short 1.15s rolling window gives a responsive keys/sec reading (currentKPM's 10s is far too slow).
+        keyTimes.removeAll { now - $0 > 1.15 }
+        let rate = CGFloat(keyTimes.count) / 1.15
+        let strainTarget = max(0, min(1, (rate - 4.6) / 4.2))
+        let strainRate: CGFloat = strainTarget > strain ? 9.0 : 3.2
+        strain += (strainTarget - strain) * min(1, dt * strainRate)
+
+        // "Fast" once arms the overload; strain may decay as the burst ends, so the
+        // trigger keys off the armed flag + a real pause, not off a decaying strain value.
+        let fastTyping = rate >= 7.6
+        if fastTyping {
+            lastFastKeyTime = now
+            overloadArmed = true
+        }
+
+        if isFried {
+            // Fried ends on its 3s timer, on any fresh key (handled in triggerKeyDown),
+            // or on a deliberate mouse move.
+            friedTimeLeft -= dt
+            let moveSpeed = hypot(curMouseVel.dx, curMouseVel.dy)
+            if friedTimeLeft <= 0 || (moveSpeed > 55 && now - curLastMouseMove < 0.25) {
+                endFried(now: now)
+            }
+        } else {
+            // The instant an armed fast burst truly goes quiet (no new keys) -> short-circuit.
+            let noKeyFor = curLastKeyTime > 0 ? (now - curLastKeyTime) : .infinity
+            let sinceFast = lastFastKeyTime > 0 ? (now - lastFastKeyTime) : .infinity
+            if overloadArmed && noKeyFor > 0.16 && sinceFast > 0.12 && sinceFast < 0.85 {
+                startFried(now: now)
+            }
+            // If the burst ended long ago without a clean pause, disarm so an idle
+            // period (or a later slow session) can never trigger it.
+            if sinceFast > 2.5 { overloadArmed = false }
+        }
 
         // 1. Decay petting intensity gracefully when hand stops moving
         if now - lastPetTime > 0.28 {
@@ -599,6 +683,18 @@ final class CatPhysics {
         earFold.target = max(petHeadIntensity * 0.7, petBodyIntensity * 0.45) + sleepiness * 0.25 - hunt * 0.18
         earTwitch.target = 0
 
+        // Overload posture: straining = tense crouch; fried = head hangs, ears droop, body deflates.
+        if isStraining {
+            earTwitch.target = sin(now * 26) * strain * 1.5
+            headOffsetY.target += strain * 2.0
+        }
+        if isFried {
+            let droop = min(1, (3.0 - friedTimeLeft) * 2.5)
+            headOffsetY.target += 7.0 * droop
+            earFold.target = max(earFold.target, 0.75 * droop)
+            bodySquash.target = 1.0 - 0.07 * droop
+        }
+
         // Music: ears twitch with each real beat (both paws free).
         if musicGrooveActive {
             earTwitch.target = sin(now * 3.2) * (0.6 + musicPulse.level * 2.2) + musicPulse.beat * 3.0
@@ -657,6 +753,12 @@ final class CatPhysics {
         // Music nod is applied after the look-at targets so it isn't overwritten.
         if musicGrooveActive {
             headPitch.target += musicPulse.beat * 0.16 + musicPulse.level * 0.04
+        }
+        // Fried overrides everything: head hangs down, gaze unfocused.
+        if isFried {
+            let droop = min(1, (3.0 - friedTimeLeft) * 2.5)
+            headPitch.target = 0.32 * droop
+            headYaw.target *= (1 - 0.6 * droop)
         }
 
         let headStiff: CGFloat = 88 + hunt * 75
@@ -747,10 +849,28 @@ final class CatPhysics {
             }
         }
 
+        // 10b. Overload smoke wisps — keep emitting while fried, then let them drift away.
+        if isFried {
+            smokeCooldown -= dt
+            if smokeCooldown <= 0 {
+                smokeCooldown = 0.14
+                spawnSmoke(seatX: CatPhysics.seatAnchor.x + bodyShiftX.value)
+            }
+        }
+        for i in smokePuffs.indices.reversed() {
+            smokePuffs[i].age += dt
+            smokePuffs[i].position.x += smokePuffs[i].velocity.x * dt
+                + sin(smokePuffs[i].age * 2.6 + smokePuffs[i].seed) * 7 * dt
+            smokePuffs[i].position.y += smokePuffs[i].velocity.y * dt
+            if smokePuffs[i].age >= smokePuffs[i].lifetime {
+                smokePuffs.remove(at: i)
+            }
+        }
+
         // 11. Music mode overlay (independent of typing — adds, never replaces)
         let music = MusicPulse.shared
         let musicOn = UserDefaults.standard.object(forKey: "KuroCat.MusicMode") as? Bool ?? false
-        let active = musicOn && music.isPlaying && scripted == nil  // no music during scripted test frames
+        let active = musicOn && music.isPlaying && scripted == nil && !isFried  // fried face wins over music notes
         let presenceTarget: CGFloat = active ? 1.0 : 0.0
         equalizerPresence += (presenceTarget - equalizerPresence) * min(1, dt * 5.0)
 
@@ -787,6 +907,74 @@ final class CatPhysics {
                 musicNotes.remove(at: i)
             }
         }
+    }
+
+    // MARK: - Overload / fried helpers
+
+    /// Test/preview hook: force the overload state for headless visual verification.
+    func previewSetOverload(strain s: CGFloat, fried: Bool, timeLeft: CGFloat = 3.0) {
+        strain = s
+        isFried = fried
+        friedTimeLeft = timeLeft
+        if fried {
+            smokePuffs.removeAll()
+            smokeCooldown = 0
+            let seatX = CatPhysics.seatAnchor.x + bodyShiftX.value
+            for _ in 0..<10 { spawnSmoke(seatX: seatX) }
+        }
+    }
+
+    private func startFried(now: CFTimeInterval) {
+        isFried = true
+        friedTimeLeft = 3.0
+        friedStartedAt = now
+        strain = 0
+        smokeCooldown = 0
+        keyTimes.removeAll()
+        lastFastKeyTime = 0
+        overloadArmed = false
+
+        // A strong first puff so the effect reads immediately.
+        let seatX = CatPhysics.seatAnchor.x + bodyShiftX.value
+        for _ in 0..<3 {
+            spawnSmoke(seatX: seatX, strong: true)
+        }
+
+        // Snapshot: the fried face overrides notes and other expressions.
+        musicNotes.removeAll()
+    }
+
+    private func endFried(now: CFTimeInterval) {
+        isFried = false
+        friedTimeLeft = 0
+        // Refractory window so a continuing keystroke burst cannot instantly re-trigger.
+        lastFastKeyTime = 0
+        overloadArmed = false
+        keyTimes.removeAll()
+        strain = 0
+        smokeCooldown = 0
+    }
+
+    private func spawnSmoke(seatX: CGFloat, strong: Bool = false) {
+        let spread: CGFloat = strong ? 20 : 16
+        let puff = SmokePuff(
+            position: CGPoint(
+                x: seatX + CGFloat.random(in: -spread...spread),
+                y: 92 + CGFloat.random(in: -8...6)
+            ),
+            velocity: CGPoint(
+                x: CGFloat.random(in: -7...7),
+                y: -(strong ? CGFloat.random(in: 30...46) : CGFloat.random(in: 22...38))
+            ),
+            // Start slightly aged so the very first frame already shows a faint wisp
+            // instead of being fully transparent (sin(0)=0).
+            age: CGFloat.random(in: 0.18...0.5),
+            lifetime: CGFloat.random(in: 1.0...1.7),
+            radius: CGFloat.random(in: 6...11),
+            seed: CGFloat.random(in: 0...6.28)
+        )
+        smokePuffs.append(puff)
+        if smokePuffs.count > 26 { smokePuffs.removeFirst(smokePuffs.count - 26) }
     }
 
     private func spawnMusicNote(now: CFTimeInterval) {

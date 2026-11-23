@@ -119,13 +119,16 @@ enum CatRenderer {
             drawFloatingKeycaps(in: ctx, physics: physics)
         }
 
-        // 8.5 Floating music notes (reuse the keycap/sparkle particle aesthetic)
-        if !physics.musicNotes.isEmpty {
+        // 8.5 Floating music notes (reuse the keycap/sparkle particle aesthetic) — hidden while fried
+        if !physics.musicNotes.isEmpty && !physics.isFried {
             drawMusicNotes(in: ctx, physics: physics, eyeTheme: settings.eyeTheme)
         }
 
         // 9. Subtle Petting Sparkles / Sleep Z
         drawSparkles(in: ctx, physics: physics, eyeTheme: settings.eyeTheme)
+
+        // 9b. Fried smoke wisps (drawn last so they hover clearly above the head)
+        drawSmoke(in: ctx, physics: physics)
 
         // 10. Optional non-intrusive Permission Pill if global monitoring not yet granted
         if showPermissionPill {
@@ -712,9 +715,153 @@ enum CatRenderer {
         drawEye3D(in: ctx, isLeft: true, yawRad: yawRad, pitchRad: pitchRad, physics: physics, eyeTheme: eyeTheme, coat: coat)
         drawEye3D(in: ctx, isLeft: false, yawRad: yawRad, pitchRad: pitchRad, physics: physics, eyeTheme: eyeTheme, coat: coat)
 
+        // 1b. Overload mouth: gritted teeth when straining, flat dazed line when fried.
+        if physics.isFried || physics.isStraining {
+            drawOverloadMouth(in: ctx, yawRad: yawRad, pitchRad: pitchRad, physics: physics, coat: coat)
+        }
+
+        // 1c. Tier-3 extras: comic anger vein + sweat drop for the "ALL OUT" look.
+        if physics.isStraining && physics.strainTier >= 3 {
+            drawStrainExtras(in: ctx, yawRad: yawRad, pitchRad: pitchRad, physics: physics, eyeTheme: eyeTheme)
+        }
+
         // 2. 3D-Projected Whiskers (outer-side whiskers poke out past silhouette when turning!)
         drawWhiskers3D(in: ctx, yawRad: yawRad, pitchRad: pitchRad, physics: physics, coat: coat)
 
+        ctx.restoreGState()
+    }
+
+    /// Small centered mouth between/below the eyes — gritted teeth or a flat dazed squiggle.
+    private static func drawOverloadMouth(
+        in ctx: CGContext,
+        yawRad: CGFloat,
+        pitchRad: CGFloat,
+        physics: CatPhysics,
+        coat: CatCoatTheme
+    ) {
+        let proj = projectHead3D(x: 0, y: 12.5, z: 29.0, yawRad: yawRad, pitchRad: pitchRad).pt
+        let ink: NSColor = (coat == .siamese) ? siamesePoint : catBlack
+        ctx.saveGState()
+        ctx.translateBy(x: proj.x, y: proj.y)
+
+        if physics.isFried {
+            // Wobbly, flat "I'm done" mouth — themed so it stays visible on dark fur.
+            ctx.setStrokeColor(NSColor(calibratedRed: 0.62, green: 0.66, blue: 0.60, alpha: 0.85).cgColor)
+            ctx.setLineWidth(1.5)
+            ctx.setLineCap(.round)
+            ctx.move(to: CGPoint(x: -5.5, y: 0))
+            ctx.addQuadCurve(to: CGPoint(x: -1.8, y: 1.6), control: CGPoint(x: -3.6, y: -0.8))
+            ctx.addQuadCurve(to: CGPoint(x: 1.8, y: 0.2), control: CGPoint(x: 0, y: 2.6))
+            ctx.addQuadCurve(to: CGPoint(x: 5.5, y: 1.4), control: CGPoint(x: 3.6, y: -1.0))
+            ctx.strokePath()
+        } else {
+            // Straining mouth escalates: tier 1 = tight line, 2 = gritted teeth, 3 = bared fangs.
+            let tier = physics.strainTier
+            if tier <= 1 {
+                // Tightly pressed line — holding it together.
+                ctx.setStrokeColor(ink.cgColor)
+                ctx.setLineWidth(1.8)
+                ctx.setLineCap(.round)
+                ctx.move(to: CGPoint(x: -5.0, y: 0))
+                ctx.addQuadCurve(to: CGPoint(x: 5.0, y: 0), control: CGPoint(x: 0, y: -1.0))
+                ctx.strokePath()
+            } else {
+                let fangs = tier >= 3
+                let halfW: CGFloat = fangs ? 8.0 : 6.5
+                let barH: CGFloat = fangs ? 5.4 : 4.4
+                ctx.setFillColor(ink.cgColor)
+                ctx.fill(CGRect(x: -halfW, y: -2.0, width: halfW * 2, height: barH))
+                ctx.setFillColor(NSColor(calibratedWhite: 0.95, alpha: 0.94).cgColor)
+                let step: CGFloat = fangs ? 3.0 : 2.6
+                var x: CGFloat = -halfW + 1.3
+                while x < halfW - 1.3 {
+                    if fangs {
+                        // Pointed fangs for the all-out tier.
+                        let f = CGMutablePath()
+                        f.move(to: CGPoint(x: x - 0.9, y: -1.8))
+                        f.addLine(to: CGPoint(x: x + 0.9, y: -1.8))
+                        f.addLine(to: CGPoint(x: x, y: -1.8 - (step == 3.0 ? 2.6 : 1.9)))
+                        f.closeSubpath()
+                        ctx.addPath(f); ctx.fillPath()
+                    } else {
+                        ctx.fill(CGRect(x: x - 0.85, y: -1.8, width: 1.7, height: 1.9))
+                    }
+                    x += step
+                }
+                // Upper lip curl, more pronounced at tier 3.
+                ctx.setStrokeColor(ink.cgColor)
+                ctx.setLineWidth(fangs ? 1.6 : 1.2)
+                ctx.move(to: CGPoint(x: -halfW - 0.5, y: 3.2))
+                ctx.addQuadCurve(to: CGPoint(x: halfW + 0.5, y: 3.2),
+                                 control: CGPoint(x: 0, y: fangs ? 0.8 : 1.6))
+                ctx.strokePath()
+            }
+        }
+        ctx.restoreGState()
+    }
+
+    /// Tier-3 only: a comic popping-anger-vein (💢) over the brow and a flying sweat drop.
+    private static func drawStrainExtras(
+        in ctx: CGContext,
+        yawRad: CGFloat,
+        pitchRad: CGFloat,
+        physics: CatPhysics,
+        eyeTheme: EyeColorTheme
+    ) {
+        let accent = eyeTheme.primaryColor
+        let jitter = sin(physics.time * 34) * 0.8  // trembling with effort
+
+        // Anger vein: four short strokes radiating from a center, drawn above the brow.
+        let vein = projectHead3D(x: 22, y: -34, z: 20, yawRad: yawRad, pitchRad: pitchRad).pt
+        ctx.saveGState()
+        ctx.translateBy(x: vein.x, y: vein.y + jitter)
+        ctx.rotate(by: -0.18 + sin(physics.time * 9) * 0.06)
+        ctx.setStrokeColor(accent.cgColor)
+        ctx.setLineWidth(2.2)
+        ctx.setLineCap(.round)
+        // small diamond core (build on a path — CGContext has no closeSubpath)
+        let core = CGMutablePath()
+        core.move(to: CGPoint(x: 0, y: -3.2))
+        core.addLine(to: CGPoint(x: 3.2, y: 0))
+        core.addLine(to: CGPoint(x: 0, y: 3.2))
+        core.addLine(to: CGPoint(x: -3.2, y: 0))
+        core.closeSubpath()
+        ctx.addPath(core)
+        ctx.strokePath()
+        // radiating ticks
+        let rays = CGMutablePath()
+        let rayCoords: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
+            (-6.0, -6.0, -3.2, -3.2), (6.0, -6.0, 3.2, -3.2),
+            (-6.0, 6.0, -3.2, 3.2), (6.0, 6.0, 3.2, 3.2),
+            (0, -8.2, 0, -4.6)
+        ]
+        for r in rayCoords {
+            rays.move(to: CGPoint(x: r.0, y: r.1))
+            rays.addLine(to: CGPoint(x: r.2, y: r.3))
+        }
+        ctx.addPath(rays)
+        ctx.strokePath()
+        ctx.restoreGState()
+
+        // Sweat drop flinging off the other side of the head — pale blue-teardrop.
+        let sweat = projectHead3D(x: -34, y: -26, z: 16, yawRad: yawRad, pitchRad: pitchRad).pt
+        let fly = sin(physics.time * 12) * 1.6
+        ctx.saveGState()
+        ctx.translateBy(x: sweat.x - 3 + fly, y: sweat.y - 2)
+        ctx.rotate(by: -0.28)
+        ctx.setFillColor(NSColor(calibratedRed: 0.62, green: 0.84, blue: 0.94, alpha: 0.92).cgColor)
+        let drop = CGMutablePath()
+        drop.move(to: CGPoint(x: 0, y: -5.5))
+        drop.addQuadCurve(to: CGPoint(x: 4.0, y: 1.5), control: CGPoint(x: 3.6, y: -3.0))
+        drop.addQuadCurve(to: CGPoint(x: 0, y: 5.5), control: CGPoint(x: 4.4, y: 5.2))
+        drop.addQuadCurve(to: CGPoint(x: -4.0, y: 1.5), control: CGPoint(x: -4.4, y: 5.2))
+        drop.addQuadCurve(to: CGPoint(x: 0, y: -5.5), control: CGPoint(x: -3.6, y: -3.0))
+        drop.closeSubpath()
+        ctx.addPath(drop)
+        ctx.fillPath()
+        // tiny highlight
+        ctx.setFillColor(NSColor.white.cgColor)
+        ctx.fillEllipse(in: CGRect(x: -1.6, y: 0.4, width: 1.8, height: 2.4))
         ctx.restoreGState()
     }
 
@@ -785,6 +932,103 @@ enum CatRenderer {
         ctx.saveGState()
         ctx.translateBy(x: proj.pt.x, y: proj.pt.y)
         ctx.scaleBy(x: foreshortenX, y: foreshortenY)
+
+        let faceInk: NSColor = (coat == .siamese) ? siamesePoint : catBlack
+
+        // Mode -1: FRIED / DAZED — half-lidded vacant eyes, pupils drifting out of sync.
+        // Takes priority over every other expression while the 3s smoke effect runs.
+        if physics.isFried {
+            let eRect = CGRect(x: -11.6, y: -7.8, width: 23.2, height: 15.6)
+            ctx.setFillColor(eyeColor.withAlphaComponent(0.5).cgColor)
+            ctx.fillEllipse(in: eRect)
+
+            // Small, dim, unfocused pupils sitting LOW so the drooping lid still reveals them.
+            let drift = sin(physics.time * 1.7 + (isLeft ? 0 : 2.3)) * 1.8
+            let px = (isLeft ? -2.8 : 2.6) + drift
+            let py: CGFloat = 3.0 + cos(physics.time * 1.3 + (isLeft ? 0.5 : 2.0)) * 0.9
+            ctx.setFillColor(faceInk.cgColor)
+            ctx.fillEllipse(in: CGRect(x: px - 2.2, y: py - 2.4, width: 4.4, height: 4.8))
+
+            // Heavy drooping upper lid covers the TOP portion only — pupils stay visible below.
+            let lidPath = CGMutablePath()
+            lidPath.move(to: CGPoint(x: -12.6, y: 7.8))
+            lidPath.addLine(to: CGPoint(x: -12.6, y: 0.5))
+            lidPath.addQuadCurve(to: CGPoint(x: 12.6, y: 0.5), control: CGPoint(x: 0, y: -2.2))
+            lidPath.addLine(to: CGPoint(x: 12.6, y: 7.8))
+            lidPath.closeSubpath()
+            ctx.setFillColor(faceInk.cgColor)
+            ctx.addPath(lidPath)
+            ctx.fillPath()
+            // Tired crease along the drooping lid edge, in theme color so it reads on black fur.
+            ctx.setStrokeColor(eyeColor.withAlphaComponent(0.55).cgColor)
+            ctx.setLineWidth(1.4)
+            ctx.setLineCap(.round)
+            ctx.move(to: CGPoint(x: -10.8, y: 0.5))
+            ctx.addQuadCurve(to: CGPoint(x: 10.8, y: 0.5), control: CGPoint(x: 0, y: -1.8))
+            ctx.strokePath()
+            ctx.restoreGState()
+            return
+        }
+
+        // Mode 0: STRAINING — three escalating tiers of effort while typing too fast.
+        // tier 1 = slight exertion, 2 = really trying, 3 = all-out.
+        if physics.isStraining {
+            let tier = physics.strainTier
+            // 0..1 progress inside the whole straining band, used for smooth per-frame nuance.
+            let s = min(1, max(0, (physics.strain - 0.42) / 0.58))
+            // Tier weights (t1 / t2 / t3) drive how extreme each feature gets.
+            let w1: CGFloat = tier == 1 ? 1 : (tier == 2 ? 0.55 : 0.3)
+            let w2: CGFloat = tier == 2 ? 1 : (tier == 3 ? 0.6 : 0)
+            let w3: CGFloat = tier == 3 ? 1 : 0
+
+            // Eye height shrinks with effort: wide-ish -> squint -> razor sliver at tier 3.
+            let halfH: CGFloat = tier == 3 ? 3.6 : (8.8 - 2.2 * w1 - 1.8 * w2)
+            let eRect = CGRect(x: -12.2, y: -halfH, width: 24.4, height: halfH * 2)
+            ctx.setFillColor(eyeColor.cgColor)
+            ctx.fillEllipse(in: eRect)
+
+            // Pupil narrows from oval -> tight slit as effort climbs.
+            let gaze = physics.eyeGaze.point
+            let px = gaze.x * (3.0 - 1.0 * w3)
+            let pupilW: CGFloat = 4.6 - 1.6 * w2 - 0.9 * w3
+            let pupilH: CGFloat = halfH * 1.7
+            ctx.setFillColor(faceInk.cgColor)
+            ctx.fillEllipse(in: CGRect(x: px - pupilW / 2, y: -pupilH / 2, width: pupilW, height: pupilH))
+
+            // Upper lid presses down harder each tier (top squeeze).
+            let topSqueeze: CGFloat = 2.4 + 1.8 * w1 + 1.6 * w2 + 1.4 * w3
+            ctx.setFillColor(faceInk.cgColor)
+            ctx.fill(CGRect(x: -12.6, y: -halfH - 0.8, width: 25.2, height: topSqueeze))
+
+            // Furrowed brow: deeper, thicker and more steeply angled with each tier.
+            // Tier 3 gets a heavy, near-horizontal scowl slammed low over the eyes.
+            ctx.setStrokeColor(eyeColor.withAlphaComponent(0.72 + 0.1 * w3).cgColor)
+            ctx.setLineWidth(tier == 3 ? 4.6 : (2.2 + 0.5 * w2))
+            ctx.setLineCap(.round)
+            let innerX: CGFloat = isLeft ? 9.5 : -9.5
+            let outerX: CGFloat = isLeft ? -11.0 : 11.0
+            let outerY: CGFloat = tier == 3 ? -9.4 : (-10.6 - 1.4 * w1 - 1.3 * w2)
+            let innerY: CGFloat = tier == 3 ? -6.6 : (-7.8 - 2.2 * w1 - 2.3 * w2)
+            ctx.move(to: CGPoint(x: outerX, y: outerY))
+            ctx.addQuadCurve(to: CGPoint(x: innerX, y: innerY),
+                             control: CGPoint(x: (outerX + innerX) * 0.5, y: outerY - 0.5))
+            ctx.strokePath()
+
+            // Tier 3: little strain ticks at the outer eye corner (effort / trembling).
+            if tier >= 3 {
+                ctx.setStrokeColor(eyeColor.withAlphaComponent(0.75).cgColor)
+                ctx.setLineWidth(1.1)
+                let cornerX: CGFloat = isLeft ? -13.5 : 13.5
+                for k in 0..<2 {
+                    let yy = -3.0 - CGFloat(k) * 3.4
+                    ctx.move(to: CGPoint(x: cornerX, y: yy))
+                    ctx.addLine(to: CGPoint(x: cornerX + (isLeft ? -3.6 : 3.6), y: yy - 2.0))
+                }
+                ctx.strokePath()
+            }
+            ctx.restoreGState()
+            return
+        }
 
         // Mode 1: Happy closed glowing lime-green curved line eyes (petting head!)
         if physics.isHappyClosedEyes {
@@ -1217,6 +1461,61 @@ enum CatRenderer {
                 star.closeSubpath()
                 ctx.addPath(star)
                 ctx.fillPath()
+            }
+            ctx.restoreGState()
+        }
+    }
+
+    // MARK: - Overload Smoke (rising wisps above the head)
+
+    private static func drawSmoke(in ctx: CGContext, physics: CatPhysics) {
+        guard !physics.smokePuffs.isEmpty else { return }
+        // Manga-style "steam" — thin curling line wisps rising off the head,
+        // some ending in a little spiral curl, instead of solid grey blobs.
+        let ink = NSColor(calibratedRed: 0.34, green: 0.37, blue: 0.40, alpha: 1.0)
+        for puff in physics.smokePuffs {
+            let p = min(1, puff.age / puff.lifetime)
+            let alpha = sin(min(1, p * 1.1) * .pi) * 0.62 * (1 - p * 0.25)
+            guard alpha > 0.01 else { continue }
+
+            ctx.saveGState()
+            ctx.setStrokeColor(ink.withAlphaComponent(alpha).cgColor)
+            ctx.setLineWidth(1.6 + p * 0.7)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
+
+            let len: CGFloat = 15 + p * 15 + puff.radius * 0.5
+            let amp: CGFloat = 4.2 + p * 3.2
+            let sway = sin(p * 3.6 + puff.seed) * 2.6
+            let x0 = puff.position.x + sway
+            let y0 = puff.position.y
+            let topX = x0 + sin(puff.seed) * amp
+
+            // Rising S-curve wisp (negative y = up in the logical canvas).
+            let wisp = CGMutablePath()
+            wisp.move(to: CGPoint(x: x0, y: y0 + len * 0.5))
+            wisp.addCurve(
+                to: CGPoint(x: topX, y: y0 - len * 0.5),
+                control1: CGPoint(x: x0 - amp, y: y0 + len * 0.12),
+                control2: CGPoint(x: x0 + amp, y: y0 - len * 0.12)
+            )
+            ctx.addPath(wisp)
+            ctx.strokePath()
+
+            // About half the wisps end in a tightening spiral curl.
+            if puff.seed > 3.1 {
+                let spiral = CGMutablePath()
+                var ang: CGFloat = 0
+                var rad: CGFloat = 4.2 + p * 1.2
+                spiral.move(to: CGPoint(x: topX + rad, y: y0 - len * 0.5))
+                for _ in 0..<20 {
+                    ang += 0.5
+                    rad *= 0.90
+                    spiral.addLine(to: CGPoint(x: topX + cos(ang) * rad,
+                                               y: y0 - len * 0.5 + sin(ang) * rad))
+                }
+                ctx.addPath(spiral)
+                ctx.strokePath()
             }
             ctx.restoreGState()
         }
