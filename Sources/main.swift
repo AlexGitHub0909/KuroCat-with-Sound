@@ -16,6 +16,13 @@ if let idx = CommandLine.arguments.firstIndex(of: "--render-siamese-preview"),
     exit(0)
 }
 
+// Support headless music-pulse preview (6-band spectrum + floating notes)
+if let idx = CommandLine.arguments.firstIndex(of: "--render-music-preview"),
+   idx + 1 < CommandLine.arguments.count {
+    renderMusicPreview(to: CommandLine.arguments[idx + 1])
+    exit(0)
+}
+
 // Headless state-machine test: simulate fast typing, then silence, verify fried timing.
 if CommandLine.arguments.contains("--test-overload") {
     testOverloadStateMachine()
@@ -330,6 +337,82 @@ func testOverloadStateMachine() {
         p4.step(dt: 1.0 / 60.0, windowFrameInScreen: win, scripted: s)
     }
     print("P4 slow typing 4s: fried=\(p4.isFried) strain=\(String(format:"%.2f", p4.strain)) (expect false)")
+}
+
+func renderMusicPreview(to path: String) {
+    let cellW = 360
+    let cellH = 320
+    let scale = 2
+    let frames = 4
+    let totalW = cellW * frames * scale
+    let totalH = cellH * scale
+
+    let cs = CGColorSpaceCreateDeviceRGB()
+    guard let ctx = CGContext(
+        data: nil, width: totalW, height: totalH,
+        bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else { return }
+
+    ctx.translateBy(x: 0, y: CGFloat(totalH))
+    ctx.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
+
+    let bgColors = [
+        NSColor(calibratedRed: 0.72, green: 0.74, blue: 0.71, alpha: 1.0).cgColor,
+        NSColor(calibratedRed: 0.54, green: 0.56, blue: 0.55, alpha: 1.0).cgColor
+    ] as CFArray
+    if let grad = CGGradient(colorsSpace: cs, colors: bgColors, locations: [0, 1]) {
+        ctx.drawLinearGradient(grad, start: .zero, end: CGPoint(x: cellW * frames, y: cellH), options: [])
+    }
+
+    // Four beats of varying intensity — the 6 capsules visibly rise/fall across frames.
+    let spectra: [([CGFloat], CGFloat, CGFloat)] = [
+        ([0.32, 0.55, 0.78, 0.46, 0.30, 0.20], 0.15, 0.30),
+        ([0.92, 0.68, 0.45, 0.72, 0.88, 0.55], 0.85, 0.95),
+        ([0.48, 0.35, 0.62, 0.90, 0.52, 0.40], 0.40, 0.60),
+        ([0.75, 0.88, 0.60, 0.40, 0.66, 0.82], 0.70, 0.85)
+    ]
+    let labels = ["Beat 1 · 轻拍", "Beat 2 · 重拍", "Beat 3 · 中拍", "Beat 4 · 强拍"]
+
+    for (i, spec) in spectra.enumerated() {
+        let physics = CatPhysics()
+        physics.previewSetMusic(
+            presence: 1.0,
+            bounce: spec.1 * 7,
+            blink: spec.2 > 0.8 ? 0.8 : 0.2,
+            noteCount: i == 1 || i == 3 ? 5 : 3
+        )
+        MusicPulse.shared.previewSetSpectrum(
+            level: spec.1, bass: spec.0[0], beat: spec.2,
+            bands: spec.0,
+            peaks: spec.0.map { min(1.0, $0 + 0.14) }
+        )
+        ctx.saveGState()
+        ctx.translateBy(x: CGFloat(i * cellW), y: 0)
+        ctx.setStrokeColor(NSColor(calibratedWhite: 1.0, alpha: 0.25).cgColor)
+        ctx.setLineWidth(1.0)
+        ctx.stroke(CGRect(x: 0.5, y: 0.5, width: CGFloat(cellW) - 1, height: CGFloat(cellH) - 1))
+
+        CatRenderer.draw(in: ctx, physics: physics, showPermissionPill: false)
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        ctx.setFillColor(NSColor(calibratedWhite: 0.08, alpha: 0.72).cgColor)
+        ctx.fill(CGRect(x: 8, y: 8, width: 150, height: 22))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: true)
+        NSAttributedString(string: labels[i], attributes: attrs).draw(at: CGPoint(x: 14, y: 11))
+        NSGraphicsContext.restoreGraphicsState()
+        ctx.restoreGState()
+    }
+
+    guard let cgImg = ctx.makeImage() else { return }
+    let rep = NSBitmapImageRep(cgImage: cgImg)
+    if let png = rep.representation(using: .png, properties: [:]) {
+        try? png.write(to: URL(fileURLWithPath: path))
+    }
 }
 
 func renderOverloadPreview(to path: String) {

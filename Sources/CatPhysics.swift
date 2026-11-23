@@ -911,6 +911,31 @@ final class CatPhysics {
 
     // MARK: - Overload / fried helpers
 
+    /// Test/preview hook: force the music-pulse visual overlay for headless snapshots.
+    func previewSetMusic(presence: CGFloat, bounce: CGFloat, blink: CGFloat, noteCount: Int) {
+        equalizerPresence = presence
+        musicBounce = bounce
+        musicBlinkBoost = blink
+        musicNotes.removeAll()
+        for i in 0..<noteCount {
+            let glyphs = 4
+            let n = MusicNoteParticle(
+                position: CGPoint(
+                    x: CatPhysics.seatAnchor.x + bodyShiftX.value + CGFloat.random(in: -58...58),
+                    y: 96 - CGFloat(i) * 9 + CGFloat.random(in: -8...8)
+                ),
+                velocity: .zero,
+                lifetime: 1.6,
+                glyph: i % glyphs,
+                rotation: CGFloat.random(in: -0.25...0.25),
+                scale: CGFloat.random(in: 1.0...1.5)
+            )
+            musicNotes.append(n)
+        }
+        // stagger ages so notes appear at different heights
+        for i in musicNotes.indices { musicNotes[i].age = 0.3 + CGFloat(i) * 0.14 }
+    }
+
     /// Test/preview hook: force the overload state for headless visual verification.
     func previewSetOverload(strain s: CGFloat, fried: Bool, timeLeft: CGFloat = 3.0) {
         strain = s

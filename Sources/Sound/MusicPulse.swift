@@ -21,6 +21,17 @@ final class MusicPulse: NSObject {
     /// Slow-falling peak markers, one per band — gives the bars a visible bounce.
     private(set) var bandPeaks: [CGFloat] = Array(repeating: 0, count: PulseMetrics.bandCount)
 
+    /// Test/preview hook: drive the spectrum directly for headless visual verification.
+    func previewSetSpectrum(level: CGFloat, bass: CGFloat, beat: CGFloat,
+                            bands b: [CGFloat], peaks p: [CGFloat]? = nil) {
+        self.level = level
+        self.bass = bass
+        self.beat = beat
+        self.bands = b
+        self.bandPeaks = p ?? b
+        self.isPlaying = true
+    }
+
     var enabled: Bool {
         get { UserDefaults.standard.object(forKey: "KuroCat.MusicMode") as? Bool ?? false }
         set {
