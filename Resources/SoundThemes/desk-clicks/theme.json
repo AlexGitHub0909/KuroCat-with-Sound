@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "desk-clicks",
+  "displayName": "桌面点击",
+  "license": "FilmCow Royalty-Free License",
+  "sourceURL": "https://filmcow.itch.io/filmcow-sfx-4",
+  "categories": {
+    "standard": [
+      "Samples/standard-01.wav",
+      "Samples/standard-02.wav",
+      "Samples/standard-03.wav",
+      "Samples/standard-04.wav",
+      "Samples/standard-05.wav",
+      "Samples/standard-06.wav",
+      "Samples/standard-07.wav",
+      "Samples/standard-08.wav",
+      "Samples/standard-09.wav",
+      "Samples/standard-10.wav",
+      "Samples/standard-11.wav",
+      "Samples/standard-12.wav",
+      "Samples/standard-13.wav",
+      "Samples/standard-14.wav",
+      "Samples/standard-15.wav",
+      "Samples/standard-16.wav",
+      "Samples/standard-17.wav",
+      "Samples/standard-18.wav"
+    ],
+    "enter": [
+      "Samples/enter-01.wav",
+      "Samples/enter-02.wav",
+      "Samples/enter-03.wav",
+      "Samples/enter-04.wav"
+    ],
+    "delete": [
+      "Samples/delete-01.wav",
+      "Samples/delete-02.wav",
+      "Samples/delete-03.wav",
+      "Samples/delete-04.wav"
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "mechanical",
+  "displayName": "机械键盘",
+  "license": "FilmCow Royalty-Free License",
+  "sourceURL": "https://filmcow.itch.io/filmcow-sfx-4",
+  "categories": {
+    "standard": [
+      "Samples/standard-01.wav",
+      "Samples/standard-02.wav",
+      "Samples/standard-03.wav",
+      "Samples/standard-04.wav",
+      "Samples/standard-05.wav",
+      "Samples/standard-06.wav",
+      "Samples/standard-07.wav",
+      "Samples/standard-08.wav"
+    ],
+    "space": [
+      "Samples/space-01.wav",
+      "Samples/space-02.wav"
+    ],
+    "enter": [
+      "Samples/enter-01.wav",
+      "Samples/enter-02.wav"
+    ],
+    "arrow": [
+      "Samples/arrow-01.wav",
+      "Samples/arrow-02.wav"
+    ]
+  }
+}

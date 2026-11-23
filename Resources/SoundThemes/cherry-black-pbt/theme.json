@@ -1,0 +1,84 @@
+{
+  "categories": {
+    "arrow": [
+      "Samples/arrow-01.wav",
+      "Samples/arrow-02.wav",
+      "Samples/arrow-03.wav",
+      "Samples/arrow-04.wav"
+    ],
+    "delete": [
+      "Samples/delete-01.wav"
+    ],
+    "enter": [
+      "Samples/enter-01.wav"
+    ],
+    "escape": [
+      "Samples/escape-01.wav"
+    ],
+    "modifier": [
+      "Samples/modifier-01.wav",
+      "Samples/modifier-02.wav",
+      "Samples/modifier-03.wav",
+      "Samples/modifier-04.wav",
+      "Samples/modifier-05.wav",
+      "Samples/modifier-06.wav"
+    ],
+    "space": [
+      "Samples/space-01.wav"
+    ],
+    "standard": [
+      "Samples/standard-01.wav",
+      "Samples/standard-02.wav",
+      "Samples/standard-03.wav",
+      "Samples/standard-04.wav",
+      "Samples/standard-05.wav",
+      "Samples/standard-06.wav",
+      "Samples/standard-07.wav",
+      "Samples/standard-08.wav",
+      "Samples/standard-09.wav",
+      "Samples/standard-10.wav",
+      "Samples/standard-11.wav",
+      "Samples/standard-12.wav",
+      "Samples/standard-13.wav",
+      "Samples/standard-14.wav",
+      "Samples/standard-15.wav",
+      "Samples/standard-16.wav",
+      "Samples/standard-17.wav",
+      "Samples/standard-18.wav",
+      "Samples/standard-19.wav",
+      "Samples/standard-20.wav",
+      "Samples/standard-21.wav",
+      "Samples/standard-22.wav",
+      "Samples/standard-23.wav",
+      "Samples/standard-24.wav",
+      "Samples/standard-25.wav",
+      "Samples/standard-26.wav",
+      "Samples/standard-27.wav",
+      "Samples/standard-28.wav",
+      "Samples/standard-29.wav",
+      "Samples/standard-30.wav",
+      "Samples/standard-31.wav",
+      "Samples/standard-32.wav",
+      "Samples/standard-33.wav",
+      "Samples/standard-34.wav",
+      "Samples/standard-35.wav",
+      "Samples/standard-36.wav",
+      "Samples/standard-37.wav",
+      "Samples/standard-38.wav",
+      "Samples/standard-39.wav",
+      "Samples/standard-40.wav",
+      "Samples/standard-41.wav",
+      "Samples/standard-42.wav",
+      "Samples/standard-43.wav",
+      "Samples/standard-44.wav",
+      "Samples/standard-45.wav",
+      "Samples/standard-46.wav",
+      "Samples/standard-47.wav"
+    ]
+  },
+  "displayName": "黑轴 · PBT",
+  "id": "cherry-black-pbt",
+  "license": "MIT License",
+  "schemaVersion": 1,
+  "sourceURL": "https://github.com/hainguyents13/mechvibes/tree/main/src/audio/cherrymx-black-pbt"
+}

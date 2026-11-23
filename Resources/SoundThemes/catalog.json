@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "defaultThemeID": "scissor",
+  "themeDirectories": [
+    "scissor",
+    "mechanical",
+    "cherry-blue-abs",
+    "cherry-black-pbt",
+    "typewriter",
+    "desk-clicks",
+    "pencil-notes"
+  ]
+}

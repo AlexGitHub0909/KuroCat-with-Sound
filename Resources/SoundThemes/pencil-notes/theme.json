@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "pencil-notes",
+  "displayName": "铅笔笔记",
+  "license": "FilmCow Royalty-Free License",
+  "sourceURL": "https://filmcow.itch.io/filmcow-sfx-4",
+  "categories": {
+    "standard": [
+      "Samples/standard-01.wav",
+      "Samples/standard-02.wav",
+      "Samples/standard-03.wav",
+      "Samples/standard-04.wav",
+      "Samples/standard-05.wav",
+      "Samples/standard-06.wav",
+      "Samples/standard-07.wav",
+      "Samples/standard-08.wav",
+      "Samples/standard-09.wav",
+      "Samples/standard-10.wav",
+      "Samples/standard-11.wav",
+      "Samples/standard-12.wav",
+      "Samples/standard-13.wav",
+      "Samples/standard-14.wav",
+      "Samples/standard-15.wav",
+      "Samples/standard-16.wav",
+      "Samples/standard-17.wav"
+    ],
+    "enter": [
+      "Samples/enter-01.wav",
+      "Samples/enter-02.wav",
+      "Samples/enter-03.wav",
+      "Samples/enter-04.wav"
+    ],
+    "modifier": [
+      "Samples/modifier-01.wav",
+      "Samples/modifier-02.wav",
+      "Samples/modifier-03.wav",
+      "Samples/modifier-04.wav"
+    ]
+  }
+}
