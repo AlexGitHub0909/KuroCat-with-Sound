@@ -11,7 +11,7 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.chanke.kurocat</string>
+    <string>com.chanke.kurocat.music</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -30,5 +30,7 @@
     <true/>
     <key>NSInputMonitoringUsageDescription</key>
     <string>KuroCat 需要「输入监控」权限以在打字和玩游戏时实时接收全状态键盘与鼠标按键，所有输入仅用于本地驱动桌宠动画，绝不记录或上传任何内容。</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>KuroCat 需要「仅录制系统音频」权限来感知正在播放的音乐节奏，让小猫随节拍摆动。音频只在内存中实时分析，不会录音、保存或上传。</string>
 </dict>
 </plist>

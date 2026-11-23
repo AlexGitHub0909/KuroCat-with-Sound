@@ -75,6 +75,12 @@ enum CatRenderer {
         // 2. Mini Angled 65% Mechanical Keyboard + Dynamic Keycap Glow
         drawKeyboard(in: ctx, physics: physics, theme: settings.keyboardTheme, eyeTheme: settings.eyeTheme)
 
+        // 2.6 Music pickup / spectrum bars — a self-contained prop to the cat's right.
+        // Painted behind the tail and body so it never overlaps the character.
+        if physics.equalizerPresence > 0.01 {
+            drawMusicEqualizer(in: ctx, physics: physics, eyeTheme: settings.eyeTheme)
+        }
+
         // 3. Cat Tail (behind body)
         drawTail(in: ctx, seatX: seatX, seatY: seatY, physics: physics, coat: coat)
 
@@ -82,6 +88,7 @@ enum CatRenderer {
         let headCenter = CGPoint(
             x: seatX + physics.bodyTilt.value * 36 + physics.headYaw.value * 7.5,
             y: 126 + physics.headOffsetY.value + physics.headPitch.value * 4.8 + breath * 1.1
+                - physics.musicBounce   // bob is part of the head itself, so ears and eyes stay locked together
         )
         drawEarsLayer(in: ctx, center: headCenter, physics: physics, coat: coat)
 
@@ -110,6 +117,11 @@ enum CatRenderer {
         // 8. Floating Mechanical Keycap Badges
         if settings.showKeyBadges {
             drawFloatingKeycaps(in: ctx, physics: physics)
+        }
+
+        // 8.5 Floating music notes (reuse the keycap/sparkle particle aesthetic)
+        if !physics.musicNotes.isEmpty {
+            drawMusicNotes(in: ctx, physics: physics, eyeTheme: settings.eyeTheme)
         }
 
         // 9. Subtle Petting Sparkles / Sleep Z
@@ -572,6 +584,110 @@ enum CatRenderer {
         drawEar3D(in: ctx, isLeft: false, yawRad: yawRad, pitchRad: pitchRad, fold: fold, twitch: -twitch, coat: coat)
 
         ctx.restoreGState()
+    }
+
+    // MARK: - Music Pickup / Spectrum Bars
+
+    /// Six little glowing note-capsules to the right of the cat. Driven by the real
+    /// 6-band spectrum, but styled like the project's soft rounded particles rather
+    /// than a hard audio meter — no rail, no tracks, just floating light.
+    private static func drawMusicEqualizer(in ctx: CGContext, physics: CatPhysics, eyeTheme: EyeColorTheme) {
+        let music = MusicPulse.shared
+        let fade = min(1.0, max(0.0, physics.equalizerPresence))
+        let bands = music.bands
+        let barW: CGFloat = 9
+        let gap: CGFloat = 5
+        let originX: CGFloat = 250
+        let baseY: CGFloat = 188
+        let maxH: CGFloat = 100
+        let accent = eyeTheme.primaryColor
+        let space = CGColorSpaceCreateDeviceRGB()
+
+        ctx.saveGState()
+        ctx.setAlpha(fade)
+
+        for i in 0..<bands.count {
+            let x = originX + CGFloat(i) * (barW + gap)
+            // Real spectrum with a gentle curve so quiet bands stay legible, plus a
+            // shared beat lift so the whole group visibly pulses on the downbeat.
+            let raw = min(1.0, max(0.0, bands[i]))
+            let value = min(1.0, pow(raw, 0.52) + music.beat * 0.16)
+            let h = max(13.0, value * maxH)
+
+            // Soft halo behind each capsule
+            let glowRect = CGRect(x: x - 2.5, y: baseY - h - 2.5, width: barW + 5, height: h + 5)
+            ctx.setFillColor(accent.withAlphaComponent(0.10).cgColor)
+            ctx.addPath(CGPath(roundedRect: glowRect, cornerWidth: (barW + 5) / 2,
+                               cornerHeight: (barW + 5) / 2, transform: nil))
+            ctx.fillPath()
+
+            // Rounded capsule, brighter toward the tip
+            let capsule = CGPath(roundedRect: CGRect(x: x, y: baseY - h, width: barW, height: h),
+                                 cornerWidth: barW / 2, cornerHeight: barW / 2, transform: nil)
+            let colors = [accent.withAlphaComponent(0.40).cgColor,
+                          accent.withAlphaComponent(0.90).cgColor] as CFArray
+            if let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 1]) {
+                ctx.saveGState()
+                ctx.addPath(capsule)
+                ctx.clip()
+                ctx.drawLinearGradient(gradient,
+                                       start: CGPoint(x: x, y: baseY),
+                                       end: CGPoint(x: x, y: baseY - h),
+                                       options: [])
+                ctx.restoreGState()
+            }
+
+            // Falling peak cap floats above the capsule — the classic "bounce" cue.
+            // Tinted from the theme color so it reads as part of the same glow.
+            let peakRaw = min(1.0, max(0.0, music.bandPeaks[i]))
+            let peakValue = min(1.0, pow(peakRaw, 0.52) + music.beat * 0.16)
+            let peakY = baseY - max(peakValue * maxH, h + 3)
+            let tint = accent.usingColorSpace(.deviceRGB) ?? accent
+            ctx.setFillColor(NSColor(calibratedRed: tint.redComponent * 0.55,
+                                     green: tint.greenComponent * 0.55,
+                                     blue: tint.blueComponent * 0.55,
+                                     alpha: 0.75).cgColor)
+            ctx.fill(CGRect(x: x + 1, y: peakY, width: barW - 2, height: 2.0))
+
+            // A tiny light hovering just above the tip — like a floating note head
+            let beadR: CGFloat = 1.8 + value * 1.2 + music.beat * 0.9
+            let beadCY = peakY - beadR - 1.0
+            ctx.setFillColor(accent.withAlphaComponent(0.95).cgColor)
+            ctx.fillEllipse(in: CGRect(x: x + barW / 2 - beadR,
+                                       y: beadCY - beadR,
+                                       width: beadR * 2, height: beadR * 2))
+        }
+
+        ctx.restoreGState()
+    }
+
+    // MARK: - Floating Music Notes (music-mode particle layer)
+
+    private static func drawMusicNotes(in ctx: CGContext, physics: CatPhysics, eyeTheme: EyeColorTheme) {
+        let glyphs = ["♪", "♫", "♩", "♬"]
+        for note in physics.musicNotes {
+            let progress = note.age / note.lifetime
+            let alpha = sin(min(1.0, progress) * .pi) * 0.92
+            let popScale: CGFloat = progress < 0.12 ? (0.7 + 0.3 * (progress / 0.12)) : 1.0
+
+            ctx.saveGState()
+            ctx.setAlpha(alpha)
+            ctx.translateBy(x: note.position.x, y: note.position.y)
+            ctx.rotate(by: note.rotation + sin(progress * .pi * 2) * 0.12)
+            ctx.scaleBy(x: note.scale * popScale, y: note.scale * popScale)
+
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 20, weight: .medium),
+                .foregroundColor: eyeTheme.primaryColor
+            ]
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: true)
+            let str = NSAttributedString(string: glyphs[note.glyph % glyphs.count], attributes: attrs)
+            str.draw(at: CGPoint(x: -str.size().width/2, y: -str.size().height/2))
+            NSGraphicsContext.restoreGraphicsState()
+
+            ctx.restoreGState()
+        }
     }
 
     // MARK: - 2.5D Head Features (Luminous Eyes & Whiskers)

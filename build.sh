@@ -99,6 +99,7 @@ SWIFT_SOURCES=(
     "$ROOT/Sources/CatRenderer.swift"
     "$ROOT/Sources/OverlayWindow.swift"
     "$ROOT/Sources/Sound/KuroSoundEngine.swift"
+    "$ROOT/Sources/Sound/MusicPulse.swift"
     "$ROOT/Sources/AppDelegate.swift"
     "$ROOT/Sources/main.swift"
 )
@@ -111,6 +112,7 @@ COMMON_FLAGS=(
     -framework QuartzCore
     -framework AVFAudio
     -framework AudioToolbox
+    -framework CoreAudio
     -framework IOKit
     -framework ApplicationServices
 )
@@ -136,7 +138,7 @@ if [ -n "$DEV_IDENTITY" ]; then
     codesign --force --deep --sign "$DEV_IDENTITY" "$APP_BUNDLE"
 else
     echo "==> Signing ad-hoc (no Apple Development cert found)"
-    codesign --force --deep --sign - --identifier "com.chanke.kurocat" "$APP_BUNDLE"
+    codesign --force --deep --sign - --identifier "com.chanke.kurocat.music" "$APP_BUNDLE"
 fi
 
 echo "==> Built successfully: $APP_BUNDLE"

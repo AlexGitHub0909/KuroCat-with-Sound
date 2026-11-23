@@ -147,6 +147,17 @@ struct PurrSparkle {
     let isSleepZ: Bool
 }
 
+/// Music-note particle floating up with the beat. Styled after the existing keycaps/sparkles.
+struct MusicNoteParticle {
+    var position: CGPoint
+    var velocity: CGPoint
+    var age: CGFloat = 0
+    let lifetime: CGFloat
+    let glyph: Int          // index into musical note glyph set
+    let rotation: CGFloat
+    let scale: CGFloat
+}
+
 struct ScriptedFrameInput {
     var now: CFTimeInterval
     var activeKeys: Set<PhysicalKey>
@@ -205,9 +216,17 @@ final class CatPhysics {
     var keyGlow: [PhysicalKey: CGFloat] = [:]
     var floatingKeycaps: [FloatingKeycap] = []
     var sparkles: [PurrSparkle] = []
+    var musicNotes: [MusicNoteParticle] = []
     private var nextBadgeID = 1
     private var badgeCascadeIndex = 0
     private var lastBadgeTime: CFTimeInterval = 0
+
+    // MARK: - Music mode state (overlay only — never suppresses typing animations)
+    var equalizerPresence: CGFloat = 0        // 0...1 fade-in of the mic/spectrum bars
+    var musicBounce: CGFloat = 0              // spring-ish head bob driven by bass
+    var musicBlinkBoost: CGFloat = 0          // subtle happy-eye squint on beats
+    private var lastNoteTime: CFTimeInterval = 0
+    private var noteGlyphIndex = 0
 
     // Time & blink
     private(set) var time: CGFloat = 0
@@ -240,7 +259,9 @@ final class CatPhysics {
     var effectiveEyeClosure: CGFloat {
         let petClose = max(petHeadIntensity * 1.0, petBodyIntensity * 0.62)
         let sleepClose = sleepiness * 0.92
-        return min(1.0, max(blinkProgress, max(petClose, sleepClose)))
+        // Music beat adds a tiny delighted squint — subtle, never fully closes
+        let musicClose = musicBlinkBoost * 0.52
+        return min(1.0, max(blinkProgress, max(petClose, max(sleepClose, musicClose))))
     }
 
     /// True when eyes should draw the signature glowing lime horizontal closed-eye lines
@@ -510,6 +531,13 @@ final class CatPhysics {
             y: CatPhysics.mouseBaseCenter.y + mouseOffset.point.y
         )
 
+        // Paws always keep their normal typing / mouse behaviour in music mode.
+        // This flag only drives the head, ears and tail groove — never the paws.
+        let musicPulse = MusicPulse.shared
+        let musicModeOn = (UserDefaults.standard.object(forKey: "KuroCat.MusicMode") as? Bool ?? false)
+        let musicGrooveActive = musicModeOn && musicPulse.isPlaying && scripted == nil
+            && leftKey == nil && rightKey == nil && !mouseRecent && sleepiness < 0.3
+
         // Left paw target
         if let lk = leftKey {
             leftPaw.target = KeyboardLayout.canvasPoint(for: lk)
@@ -571,6 +599,11 @@ final class CatPhysics {
         earFold.target = max(petHeadIntensity * 0.7, petBodyIntensity * 0.45) + sleepiness * 0.25 - hunt * 0.18
         earTwitch.target = 0
 
+        // Music: ears twitch with each real beat (both paws free).
+        if musicGrooveActive {
+            earTwitch.target = sin(now * 3.2) * (0.6 + musicPulse.level * 2.2) + musicPulse.beat * 3.0
+        }
+
         bodyShiftX.step(dt: dt, stiffness: 140, damping: 18)
         bodyTilt.step(dt: dt, stiffness: 140, damping: 18)
         bodySquash.step(dt: dt, stiffness: 280, damping: 18)
@@ -621,6 +654,11 @@ final class CatPhysics {
             headYaw.target = max(-1.0, min(1.0, lookTargetX))
             headPitch.target = max(-1.0, min(1.0, lookTargetY))
         }
+        // Music nod is applied after the look-at targets so it isn't overwritten.
+        if musicGrooveActive {
+            headPitch.target += musicPulse.beat * 0.16 + musicPulse.level * 0.04
+        }
+
         let headStiff: CGFloat = 88 + hunt * 75
         let headDamp: CGFloat = 14.5 + hunt * 4.5
         headYaw.step(dt: dt, stiffness: headStiff, damping: headDamp)
@@ -629,6 +667,9 @@ final class CatPhysics {
         // Subtle natural head roll coupled to head turning (curious tilt / locked-on hunt!)
         if now - lastPetTime > 0.28 {
             headTilt.target = bodyTilt.target * 0.45 + headYaw.value * (0.11 + hunt * 0.05) - headYaw.value * headPitch.value * 0.04
+        }
+        if musicGrooveActive {
+            headTilt.target += sin(now * 1.9) * musicPulse.level * 0.16 + musicPulse.beat * 0.12
         }
         headTilt.step(dt: dt, stiffness: 130, damping: 16)
 
@@ -665,7 +706,8 @@ final class CatPhysics {
         let kpmBoost = min(2.4, CGFloat(engine.currentKPM) / 160.0)
         let petBoost = max(petHeadIntensity, petBodyIntensity) * 1.4
         let huntBoost = hunt * 2.8
-        let tailSpeed: CGFloat = 1.85 + kpmBoost + petBoost + huntBoost - sleepiness * 1.1
+        let musicBoost = (musicModeOn && musicPulse.isPlaying) ? musicPulse.level * 2.2 + musicPulse.beat * 1.5 : 0
+        let tailSpeed: CGFloat = 1.85 + kpmBoost + petBoost + huntBoost + musicBoost - sleepiness * 1.1
         tailPhase += dt * tailSpeed
 
         // 8. Update per-keycap glows
@@ -704,5 +746,66 @@ final class CatPhysics {
                 sparkles.remove(at: i)
             }
         }
+
+        // 11. Music mode overlay (independent of typing — adds, never replaces)
+        let music = MusicPulse.shared
+        let musicOn = UserDefaults.standard.object(forKey: "KuroCat.MusicMode") as? Bool ?? false
+        let active = musicOn && music.isPlaying && scripted == nil  // no music during scripted test frames
+        let presenceTarget: CGFloat = active ? 1.0 : 0.0
+        equalizerPresence += (presenceTarget - equalizerPresence) * min(1, dt * 5.0)
+
+        if active {
+            // Head bob now clearly follows the real bass and beat impulses.
+            let bobTarget = music.bass * 8.0 + music.beat * 11.0
+            musicBounce += (bobTarget - musicBounce) * min(1, dt * 18)
+            musicBounce *= (1 - dt * 2.2)
+
+            // Beat-triggered happy squint, strong enough to actually read on screen
+            if music.beat > 0.4 {
+                musicBlinkBoost = 0.95
+            }
+            musicBlinkBoost = max(0, musicBlinkBoost - dt * 2.2)
+
+            // Notes burst on beats and keep trickling while the track is loud
+            if (music.beat > 0.4 && now - lastNoteTime > 0.16)
+                || (music.level > 0.18 && now - lastNoteTime > 0.34) {
+                spawnMusicNote(now: now)
+                lastNoteTime = now
+            }
+        } else {
+            musicBounce *= (1 - dt * 6)
+            musicBlinkBoost = max(0, musicBlinkBoost - dt * 3)
+        }
+
+        // Update music note particles
+        for i in musicNotes.indices.reversed() {
+            musicNotes[i].age += dt
+            musicNotes[i].position.x += musicNotes[i].velocity.x * dt
+            musicNotes[i].position.y += musicNotes[i].velocity.y * dt
+            musicNotes[i].velocity.y -= 7 * dt   // slight upward acceleration decay
+            if musicNotes[i].age >= musicNotes[i].lifetime {
+                musicNotes.remove(at: i)
+            }
+        }
+    }
+
+    private func spawnMusicNote(now: CFTimeInterval) {
+        let headX = CatPhysics.seatAnchor.x + bodyShiftX.value
+        let glyphs = 4
+        noteGlyphIndex = (noteGlyphIndex + 1) % glyphs
+        let music = MusicPulse.shared
+        let note = MusicNoteParticle(
+            position: CGPoint(
+                x: headX + CGFloat.random(in: -54...54),
+                y: 102 + CGFloat.random(in: -12...12)
+            ),
+            velocity: CGPoint(x: CGFloat.random(in: -16...16), y: -44 - music.level * 26 - CGFloat.random(in: 0...18)),
+            lifetime: CGFloat.random(in: 1.2...1.8),
+            glyph: noteGlyphIndex,
+            rotation: CGFloat.random(in: -0.28...0.28),
+            scale: CGFloat.random(in: 1.0...1.5) * (1.0 + music.beat * 0.25)
+        )
+        musicNotes.append(note)
+        if musicNotes.count > 20 { musicNotes.removeFirst(musicNotes.count - 20) }
     }
 }

@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Initialize keyboard sound engine (KeyFoley-derived)
         KuroSoundEngine.shared.setup()
+        // Initialize music pulse (overlay animation)
+        MusicPulse.shared.setup()
 
         // Wire dual-layer InputEngine -> CatPhysics + sound playback
         let engine = InputEngine.shared
@@ -57,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         InputEngine.shared.flushStats()
         InputEngine.shared.stop()
         KuroSoundEngine.shared.stop()
+        MusicPulse.shared.stop()
     }
 
     // MARK: - 60 FPS Render Loop
@@ -266,6 +269,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // MARK: Music mode (overlay — does not affect typing animation or sound)
+        let music = MusicPulse.shared
+        let musicItem = NSMenuItem(title: "🎵 音乐律动（拾音器 + 音符）", action: #selector(toggleMusicMode), keyEquivalent: "")
+        musicItem.target = self
+        musicItem.state = music.enabled ? .on : .off
+        menu.addItem(musicItem)
+
+        if music.enabled {
+            let statusTitle = music.lastError != nil ? "⚠️ \(music.lastError!)" :
+                (music.isPlaying ? "♪ 正在跟随音乐律动" : "○ 等待音乐播放…（需系统音频录制权限）")
+            let statusLine = NSMenuItem(title: statusTitle, action: music.lastError != nil ? #selector(openSystemAudioSettings) : nil, keyEquivalent: "")
+            statusLine.target = self
+            statusLine.isEnabled = music.lastError != nil
+            menu.addItem(statusLine)
+        }
+
         let demoItem = NSMenuItem(title: "🎬 演示打字 + 摸猫动画", action: #selector(runDemoBurst), keyEquivalent: "")
         demoItem.target = self
         menu.addItem(demoItem)
@@ -316,7 +335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var launchAgentURL: URL {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents", isDirectory: true)
-        return dir.appendingPathComponent("com.chanke.kurocat.plist")
+        return dir.appendingPathComponent("com.chanke.kurocat.music.plist")
     }
 
     private func isAutoStartEnabled() -> Bool {
@@ -332,7 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 let appPath = Bundle.main.bundlePath
                 let plist: [String: Any] = [
-                    "Label": "com.chanke.kurocat",
+                    "Label": "com.chanke.kurocat.music",
                     "ProgramArguments": ["/usr/bin/open", "-a", appPath],
                     "RunAtLoad": true,
                     "KeepAlive": false
@@ -384,6 +403,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func selectVolume(_ sender: NSMenuItem) {
         guard let num = sender.representedObject as? NSNumber else { return }
         KuroSoundEngine.shared.volume = num.doubleValue
+    }
+
+    @objc private func toggleMusicMode() {
+        MusicPulse.shared.enabled.toggle()
+    }
+
+    @objc private func openSystemAudioSettings() {
+        MusicPulse.openSystemAudioSettings()
     }
 
     @objc private func selectScale(_ sender: NSMenuItem) {
