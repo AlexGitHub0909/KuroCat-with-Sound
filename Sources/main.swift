@@ -16,6 +16,14 @@ if let idx = CommandLine.arguments.firstIndex(of: "--render-siamese-preview"),
     exit(0)
 }
 
+// Support headless sakura-pink preview
+if let idx = CommandLine.arguments.firstIndex(of: "--render-pink-preview"),
+   idx + 1 < CommandLine.arguments.count {
+    let outPath = CommandLine.arguments[idx + 1]
+    renderPreviewSheet(to: outPath, forcePink: true)
+    exit(0)
+}
+
 // Support headless music-pulse preview (6-band spectrum + floating notes)
 if let idx = CommandLine.arguments.firstIndex(of: "--render-music-preview"),
    idx + 1 < CommandLine.arguments.count {
@@ -53,11 +61,15 @@ if let idx = CommandLine.arguments.firstIndex(of: "--render-showcase-video"),
     exit(0)
 }
 
-func renderPreviewSheet(to path: String, forceSiamese: Bool = false) {
+func renderPreviewSheet(to path: String, forceSiamese: Bool = false, forcePink: Bool = false) {
     let prevCoat = CatSettings.shared.coatTheme
     let prevEye = CatSettings.shared.eyeTheme
     let prevKb = CatSettings.shared.keyboardTheme
-    if forceSiamese {
+    if forcePink {
+        CatSettings.shared.coatTheme = .pink
+        CatSettings.shared.eyeTheme = .warmAmber
+        CatSettings.shared.keyboardTheme = .classicMilk
+    } else if forceSiamese {
         CatSettings.shared.coatTheme = .siamese
         CatSettings.shared.eyeTheme = .siameseBlue
         CatSettings.shared.keyboardTheme = .classicMilk
