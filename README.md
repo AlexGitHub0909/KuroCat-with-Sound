@@ -24,6 +24,10 @@
 
 ![暹罗猫预览](docs/images/preview-siamese.png)
 
+**樱花小猫皮肤**（柔粉身体、玫瑰色重点色、琥珀金眼睛）：
+
+![樱花小猫预览](docs/images/preview-pink.png)
+
 动态演示：[打字](docs/images/demo-typing.gif) · [捕猎](docs/images/demo-hunting.gif) · [组合动作](docs/images/demo-combo.gif)
 
 ## ✨ 相比原版 KuroCat 的改动
