@@ -79,7 +79,7 @@ Windows 音乐律动监听的是**默认输出设备**的混合音频；若音�
 
 | 平台 | 直接下载 | 说明 |
 |------|----------|------|
-| Windows 10 / 11 | **[KuroCat-Windows-x64.zip](windows/dist/KuroCat-Windows-x64.zip)** | 仓库内已附带预编译包；解压后双击 `KuroCat.exe` 即可，无需安装或管理员权限 |
+| Windows 10 / 11 | **[KuroCat-Windows-x64.zip](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases/download/v1.1.0/KuroCat-Windows-x64.zip)** | 来自 [v1.1.0 Release](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases/tag/v1.1.0)；仓库内 `windows/dist/` 也附带了同一份预编译包。解压后双击 `KuroCat.exe` 即可，无需安装或管理员权限 |
 | macOS 13+ | [Releases](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases) 中的 `KuroCat-macOS-universal.zip`（若尚未提供请源码编译） | 解压后将 `KuroCat.app` 拖入「应用程序」 |
 
 Windows 解压后请保持 `KuroCat.exe` 与 `SoundThemes` 目录在一起；包内已包含全部 7 套音效样本和第三方许可声明。
