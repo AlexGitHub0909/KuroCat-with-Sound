@@ -39,6 +39,7 @@ enum MenuCmd : UINT {
     CMD_TOGGLE_PET,
     CMD_COAT_BLACK,
     CMD_COAT_SIAMESE,
+    CMD_COAT_PINK,
     CMD_KB_MILK,
     CMD_KB_HACKER,
     CMD_KB_RETRO,
@@ -297,6 +298,7 @@ void showContextMenu(AppState& app, POINT screenPt) {
     HMENU coatMenu = CreatePopupMenu();
     AppendMenuW(coatMenu, MF_STRING | (app.settings.coatTheme == CatCoatTheme::ClassicBlack ? MF_CHECKED : 0), CMD_COAT_BLACK, L"\u7ECF\u5178\u5C0F\u9ED1\u732B (\u539F\u7248)");
     AppendMenuW(coatMenu, MF_STRING | (app.settings.coatTheme == CatCoatTheme::Siamese ? MF_CHECKED : 0), CMD_COAT_SIAMESE, L"\u6316\u7164\u66B9\u7F57\u732B");
+    AppendMenuW(coatMenu, MF_STRING | (app.settings.coatTheme == CatCoatTheme::Pink ? MF_CHECKED : 0), CMD_COAT_PINK, L"\u6A31\u82B1\u5C0F\u732B");
     AppendMenuW(menu, MF_POPUP, (UINT_PTR)coatMenu, L"\u732B\u54AA\u76AE\u80A4");
 
     // Keyboard Theme submenu
@@ -427,6 +429,11 @@ void showContextMenu(AppState& app, POINT screenPt) {
         case CMD_COAT_SIAMESE:
             app.settings.coatTheme = CatCoatTheme::Siamese;
             app.settings.eyeTheme = EyeColorTheme::SiameseBlue;
+            app.settings.saveToRegistry();
+            break;
+        case CMD_COAT_PINK:
+            app.settings.coatTheme = CatCoatTheme::Pink;
+            app.settings.eyeTheme = EyeColorTheme::WarmAmber;
             app.settings.saveToRegistry();
             break;
         case CMD_KB_MILK:   app.settings.keyboardTheme = KeyboardTheme::ClassicMilk; app.settings.saveToRegistry(); break;

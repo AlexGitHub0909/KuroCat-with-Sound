@@ -22,6 +22,22 @@ enum CatRenderer {
     static let siameseOutline = NSColor(calibratedRed: 0.26,  green: 0.19,  blue: 0.155, alpha: 0.88)
     static let siameseWhisker = NSColor(calibratedRed: 0.36,  green: 0.27,  blue: 0.22,  alpha: 0.68)
 
+    // Sakura pink palette (soft pink body + deeper rose points)
+    static let pinkCream   = NSColor(calibratedRed: 1.00, green: 0.89, blue: 0.94, alpha: 1.0) // #FFE3F0
+    static let pinkLatte   = NSColor(calibratedRed: 0.99, green: 0.75, blue: 0.85, alpha: 1.0) // #FCBFD9
+    static let pinkMocha   = NSColor(calibratedRed: 0.88, green: 0.50, blue: 0.68, alpha: 1.0) // #E080AD
+    static let pinkPoint   = NSColor(calibratedRed: 0.76, green: 0.33, blue: 0.55, alpha: 1.0) // #C2548C
+    static let pinkOutline = NSColor(calibratedRed: 0.66, green: 0.28, blue: 0.48, alpha: 0.88)
+    static let pinkWhisker = NSColor(calibratedRed: 0.66, green: 0.35, blue: 0.52, alpha: 0.68)
+
+    static func isPointedCoat(_ coat: CatCoatTheme) -> Bool { coat != .classicBlack }
+    static func coatCream(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkCream : siameseCream }
+    static func coatLatte(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkLatte : siameseLatte }
+    static func coatMocha(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkMocha : siameseMocha }
+    static func coatPoint(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkPoint : siamesePoint }
+    static func coatOutline(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkOutline : siameseOutline }
+    static func coatWhisker(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkWhisker : siameseWhisker }
+
     static let permissionPillRect = CGRect(x: 92, y: 294, width: 176, height: 22)
 
     /// Hit test in 360x320 logical canvas coordinates for smart click-through & petting.
@@ -358,7 +374,7 @@ enum CatRenderer {
         let tip = CGPoint(x: seatX + 91 + wag2 * 0.5, y: seatY - 30 + wag1 * 0.85 + huntDrop)
 
         ctx.saveGState()
-        let tailColor = (coat == .siamese) ? siamesePoint : catBlack
+        let tailColor = isPointedCoat(coat) ? coatPoint(coat) : catBlack
         ctx.setStrokeColor(tailColor.cgColor)
         ctx.setLineWidth(11.0)
         ctx.setLineCap(.round)
@@ -441,7 +457,7 @@ enum CatRenderer {
             ctx.clip()
 
             let cs = CGColorSpaceCreateDeviceRGB()
-            let bodyColors = [siameseCream.cgColor, siameseLatte.cgColor] as CFArray
+            let bodyColors = [coatCream(coat).cgColor, coatLatte(coat).cgColor] as CFArray
             if let grad = CGGradient(colorsSpace: cs, colors: bodyColors, locations: [0.15, 1.0]) {
                 ctx.drawLinearGradient(
                     grad,
@@ -466,10 +482,10 @@ enum CatRenderer {
             ctx.translateBy(x: maskCenter.x, y: maskCenter.y)
             ctx.scaleBy(x: maskScaleX * 1.18, y: maskScaleY * 0.88)
             let maskColors = [
-                siamesePoint.cgColor,
-                siamesePoint.withAlphaComponent(0.96).cgColor,
-                siameseMocha.withAlphaComponent(0.70).cgColor,
-                siameseMocha.withAlphaComponent(0.0).cgColor
+                coatPoint(coat).cgColor,
+                coatPoint(coat).withAlphaComponent(0.96).cgColor,
+                coatMocha(coat).withAlphaComponent(0.70).cgColor,
+                coatMocha(coat).withAlphaComponent(0.0).cgColor
             ] as CFArray
             if let maskGrad = CGGradient(colorsSpace: cs, colors: maskColors, locations: [0.0, 0.44, 0.74, 1.0]) {
                 ctx.drawRadialGradient(
@@ -485,9 +501,9 @@ enum CatRenderer {
         ctx.restoreGState()
 
         // Crisp subtle warm-cocoa outline around Siamese cream body so it pops on light & dark wallpapers!
-        if coat == .siamese {
+        if isPointedCoat(coat) {
             ctx.saveGState()
-            ctx.setStrokeColor(siameseOutline.cgColor)
+            ctx.setStrokeColor(coatOutline(coat).cgColor)
             ctx.setLineWidth(1.5)
             ctx.addPath(path)
             ctx.strokePath()
@@ -499,7 +515,7 @@ enum CatRenderer {
         ctx.translateBy(x: seatX, y: seatY)
         ctx.rotate(by: bTilt)
         ctx.scaleBy(x: sx, y: sy)
-        ctx.setFillColor((coat == .siamese ? siamesePoint : catBlack).cgColor)
+        ctx.setFillColor((isPointedCoat(coat) ? coatPoint(coat) : catBlack).cgColor)
 
         ctx.fillEllipse(in: CGRect(x: -35, y: 3, width: 17, height: 11))
         if physics.hindFootActive.value < 0.35 {
@@ -507,7 +523,7 @@ enum CatRenderer {
         }
 
         // Subtle bottom rim highlights on tucked haunches
-        let rimColor = (coat == .siamese) ? siameseCream.withAlphaComponent(0.55) : contourMint.withAlphaComponent(0.58)
+        let rimColor = isPointedCoat(coat) ? coatCream(coat).withAlphaComponent(0.55) : contourMint.withAlphaComponent(0.58)
         ctx.setStrokeColor(rimColor.cgColor)
         ctx.setLineWidth(1.3)
         ctx.setLineCap(.round)
@@ -740,7 +756,7 @@ enum CatRenderer {
         coat: CatCoatTheme
     ) {
         let proj = projectHead3D(x: 0, y: 12.5, z: 29.0, yawRad: yawRad, pitchRad: pitchRad).pt
-        let ink: NSColor = (coat == .siamese) ? siamesePoint : catBlack
+        let ink: NSColor = isPointedCoat(coat) ? coatPoint(coat) : catBlack
         ctx.saveGState()
         ctx.translateBy(x: proj.x, y: proj.y)
 
@@ -903,7 +919,7 @@ enum CatRenderer {
         ear.closeSubpath()
 
         ctx.saveGState()
-        ctx.setFillColor((coat == .siamese ? siamesePoint : catBlack).cgColor)
+        ctx.setFillColor((isPointedCoat(coat) ? coatPoint(coat) : catBlack).cgColor)
         ctx.addPath(ear)
         ctx.fillPath()
         ctx.restoreGState()
@@ -933,7 +949,7 @@ enum CatRenderer {
         ctx.translateBy(x: proj.pt.x, y: proj.pt.y)
         ctx.scaleBy(x: foreshortenX, y: foreshortenY)
 
-        let faceInk: NSColor = (coat == .siamese) ? siamesePoint : catBlack
+        let faceInk: NSColor = isPointedCoat(coat) ? coatPoint(coat) : catBlack
 
         // Mode -1: FRIED / DAZED — half-lidded vacant eyes, pupils drifting out of sync.
         // Takes priority over every other expression while the 3s smoke effect runs.
@@ -1109,7 +1125,7 @@ enum CatRenderer {
         let closure = physics.effectiveEyeClosure
         if closure > 0.02 {
             let lidHeight = (ry * 2.2) * closure
-            ctx.setFillColor((coat == .siamese ? siamesePoint : catBlack).cgColor)
+            ctx.setFillColor((isPointedCoat(coat) ? coatPoint(coat) : catBlack).cgColor)
             ctx.fill(CGRect(x: -rx - 2, y: -ry - 2, width: rx * 2 + 4, height: lidHeight))
         }
 
@@ -1126,7 +1142,7 @@ enum CatRenderer {
     ) {
         let wiggle = sin(physics.time * 4.5) * (max(physics.petHeadIntensity, physics.petBodyIntensity) * 1.2)
         ctx.saveGState()
-        let wColor = (coat == .siamese) ? siameseWhisker : whiskerColor.withAlphaComponent(0.68)
+        let wColor = isPointedCoat(coat) ? coatWhisker(coat) : whiskerColor.withAlphaComponent(0.68)
         ctx.setStrokeColor(wColor.cgColor)
         ctx.setLineWidth(1.0)
         ctx.setLineCap(.round)
@@ -1218,7 +1234,7 @@ enum CatRenderer {
         let sign: CGFloat = isLeft ? -1.0 : 1.0
         ctx.saveGState()
 
-        if coat == .siamese {
+        if isPointedCoat(coat) {
             // Creamy upper leg dipping smoothly into adorable seal-point chocolate socks at the bottom!
             let legRect = CGRect(x: bottom.x - 7.5, y: top.y, width: 15.0, height: bottom.y - top.y + 1.0)
             let legPath = CGPath(roundedRect: legRect, cornerWidth: 6.5, cornerHeight: 6.5, transform: nil)
@@ -1227,9 +1243,9 @@ enum CatRenderer {
             ctx.clip()
             let cs = CGColorSpaceCreateDeviceRGB()
             let colors = [
-                siameseCream.withAlphaComponent(0.0).cgColor,
-                siameseMocha.withAlphaComponent(0.75).cgColor,
-                siamesePoint.cgColor
+                coatCream(coat).withAlphaComponent(0.0).cgColor,
+                coatMocha(coat).withAlphaComponent(0.75).cgColor,
+                coatPoint(coat).cgColor
             ] as CFArray
             if let grad = CGGradient(colorsSpace: cs, colors: colors, locations: [0.05, 0.52, 0.85]) {
                 ctx.drawLinearGradient(
@@ -1242,7 +1258,7 @@ enum CatRenderer {
             ctx.restoreGState()
         }
 
-        let lineColor = (coat == .siamese) ? siameseOutline.withAlphaComponent(0.62) : contourMint
+        let lineColor = isPointedCoat(coat) ? coatOutline(coat).withAlphaComponent(0.62) : contourMint
         ctx.setStrokeColor(lineColor.cgColor)
         ctx.setLineWidth(1.45)
         ctx.setLineCap(.round)
@@ -1314,10 +1330,10 @@ enum CatRenderer {
             ctx.clip()
             let cs = CGColorSpaceCreateDeviceRGB()
             let colors = [
-                siameseCream.withAlphaComponent(0.0).cgColor,
-                siameseCream.cgColor,
-                siameseMocha.cgColor,
-                siamesePoint.cgColor
+                coatCream(coat).withAlphaComponent(0.0).cgColor,
+                coatCream(coat).cgColor,
+                coatMocha(coat).cgColor,
+                coatPoint(coat).cgColor
             ] as CFArray
             if let grad = CGGradient(colorsSpace: cs, colors: colors, locations: [0.0, 0.16, 0.48, 0.78]) {
                 ctx.drawLinearGradient(grad, start: start, end: end, options: [.drawsAfterEndLocation])
@@ -1325,11 +1341,11 @@ enum CatRenderer {
             ctx.restoreGState()
 
             // Solid rich espresso-chocolate rounded paw tip (no winding-rule overlap artifacts!)
-            ctx.setFillColor(siamesePoint.cgColor)
+            ctx.setFillColor(coatPoint(coat).cgColor)
             ctx.fillEllipse(in: pawRect)
 
             // Clean outer edge outline on Siamese arm (fading in below shoulder) so it reads crisply over light backgrounds
-            ctx.setStrokeColor(siameseOutline.withAlphaComponent(0.72).cgColor)
+            ctx.setStrokeColor(coatOutline(coat).withAlphaComponent(0.72).cgColor)
             ctx.setLineWidth(1.25)
             ctx.setLineCap(.round)
             ctx.setLineJoin(.round)
@@ -1344,8 +1360,8 @@ enum CatRenderer {
         // Crisp separation stroke along upper-to-mid arm where it crosses the torso
         let highlightEdge = outlineOnLeftSide ? leftEdge : rightEdge
         if highlightEdge.count > 6 {
-            let strokeColor = (coat == .siamese)
-                ? siameseOutline.withAlphaComponent(outlineAlpha * 0.78)
+            let strokeColor = isPointedCoat(coat)
+                ? coatOutline(coat).withAlphaComponent(outlineAlpha * 0.78)
                 : contourMint.withAlphaComponent(outlineAlpha * 0.9)
             ctx.setStrokeColor(strokeColor.cgColor)
             ctx.setLineWidth(1.35)

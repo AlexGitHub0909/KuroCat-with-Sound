@@ -113,6 +113,22 @@ private:
     static Gdiplus::Color siameseOutline(BYTE a = 224){ return Gdiplus::Color(a, 66, 48, 40); }
     static Gdiplus::Color siameseWhisker(BYTE a = 174){ return Gdiplus::Color(a, 92, 69, 56); }
 
+    // Sakura pink palette (soft pink body + deeper rose points)
+    static Gdiplus::Color pinkCream(BYTE a = 255)   { return Gdiplus::Color(a, 255, 227, 240); }
+    static Gdiplus::Color pinkLatte(BYTE a = 255)   { return Gdiplus::Color(a, 252, 191, 217); }
+    static Gdiplus::Color pinkMocha(BYTE a = 255)   { return Gdiplus::Color(a, 224, 128, 173); }
+    static Gdiplus::Color pinkPoint(BYTE a = 255)   { return Gdiplus::Color(a, 194, 84, 140); }
+    static Gdiplus::Color pinkOutline(BYTE a = 224) { return Gdiplus::Color(a, 168, 71, 122); }
+    static Gdiplus::Color pinkWhisker(BYTE a = 174) { return Gdiplus::Color(a, 168, 89, 133); }
+
+    static bool isPointedCoat(CatCoatTheme c) { return c != CatCoatTheme::ClassicBlack; }
+    static Gdiplus::Color coatCream(CatCoatTheme c, BYTE a = 255)   { return c == CatCoatTheme::Pink ? pinkCream(a)   : siameseCream(a); }
+    static Gdiplus::Color coatLatte(CatCoatTheme c, BYTE a = 255)   { return c == CatCoatTheme::Pink ? pinkLatte(a)   : siameseLatte(a); }
+    static Gdiplus::Color coatMocha(CatCoatTheme c, BYTE a = 255)   { return c == CatCoatTheme::Pink ? pinkMocha(a)   : siameseMocha(a); }
+    static Gdiplus::Color coatPoint(CatCoatTheme c, BYTE a = 255)   { return c == CatCoatTheme::Pink ? pinkPoint(a)   : siamesePoint(a); }
+    static Gdiplus::Color coatOutline(CatCoatTheme c, BYTE a = 224) { return c == CatCoatTheme::Pink ? pinkOutline(a) : siameseOutline(a); }
+    static Gdiplus::Color coatWhisker(CatCoatTheme c, BYTE a = 174) { return c == CatCoatTheme::Pink ? pinkWhisker(a) : siameseWhisker(a); }
+
     static Gdiplus::Color eyePrimary(EyeColorTheme t, BYTE a = 255) {
         switch (t) {
             case EyeColorTheme::NeonChartreuse: return Gdiplus::Color(a, 201, 242, 64);
@@ -432,7 +448,7 @@ private:
         PointF c2(seatX + 66.0f + wag2 * 0.4f, seatY - 26.0f + wag1 * 0.7f + huntDrop);
         PointF tip(seatX + 91.0f + wag2 * 0.5f, seatY - 30.0f + wag1 * 0.85f + huntDrop);
 
-        Pen tailPen(coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack(), 11.0f);
+        Pen tailPen(isPointedCoat(coat) ? coatPoint(coat) : catBlack(), 11.0f);
         tailPen.SetStartCap(LineCapRound);
         tailPen.SetEndCap(LineCapRound);
         tailPen.SetLineJoin(LineJoinRound);
@@ -477,7 +493,7 @@ private:
         addQuadBezier(ear, tipR, { (outerBase.x + tipR.x) * 0.5f + sign * 2.5f, (outerBase.y + tipR.y) * 0.5f - 2.0f }, outerBase);
         ear.CloseFigure();
 
-        SolidBrush b(coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack());
+        SolidBrush b(isPointedCoat(coat) ? coatPoint(coat) : catBlack());
         g.FillPath(&b, &ear);
     }
 
@@ -536,11 +552,11 @@ private:
             LinearGradientBrush bodyGrad(
                 PointF(seatX, headCenter.y - 54.0f),
                 PointF(seatX, seatY + 38.0f),
-                siameseCream(),
-                siameseLatte()
+                coatCream(coat),
+                coatLatte(coat)
             );
             bodyGrad.SetWrapMode(WrapModeTileFlipXY);
-            Color bodyCols[4] = { siameseCream(), siameseCream(), siameseLatte(), siameseLatte() };
+            Color bodyCols[4] = { coatCream(coat), coatCream(coat), coatLatte(coat), coatLatte(coat) };
             REAL bodyPos[4] = { 0.0f, 0.22f, 0.80f, 1.0f };
             bodyGrad.SetInterpolationColors(bodyCols, bodyPos, 4);
             g.FillPath(&bodyGrad, &path);
@@ -561,7 +577,9 @@ private:
             GraphicsPath maskEllipse;
             maskEllipse.AddEllipse(-31.0f, -31.0f, 62.0f, 62.0f);
             PathGradientBrush maskBrush(&maskEllipse);
-            Color cols[4] = { Color(0, 115, 87, 69), Color(178, 115, 87, 69), siamesePoint(245), siamesePoint(255) };
+            Color cols[4] = { Color(0, coatMocha(coat).GetR(), coatMocha(coat).GetG(), coatMocha(coat).GetB()),
+                             Color(178, coatMocha(coat).GetR(), coatMocha(coat).GetG(), coatMocha(coat).GetB()),
+                             coatPoint(coat, 245), coatPoint(coat, 255) };
             REAL pos[4] = { 0.0f, 0.26f, 0.56f, 1.0f };
             maskBrush.SetInterpolationColors(cols, pos, 4);
             g.FillPath(&maskBrush, &maskEllipse);
@@ -570,7 +588,7 @@ private:
             g.Restore(cs);
 
             // Clean subtle warm-cocoa outline so Siamese pops on white & dark wallpapers
-            Pen outPen(siameseOutline(), 1.5f);
+            Pen outPen(coatOutline(coat), 1.5f);
             g.DrawPath(&outPen, &path);
         }
 
@@ -580,13 +598,13 @@ private:
         g.RotateTransform(bTilt * RadToDeg);
         g.ScaleTransform(sx, sy);
 
-        SolidBrush pawBrush(coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack());
+        SolidBrush pawBrush(isPointedCoat(coat) ? coatPoint(coat) : catBlack());
         g.FillEllipse(&pawBrush, -35.0f, 3.0f, 17.0f, 11.0f);
         if (physics.hindFootActive.value < 0.35f) {
             g.FillEllipse(&pawBrush, 18.0f, 3.0f, 17.0f, 11.0f);
         }
 
-        Pen rimPen(coat == CatCoatTheme::Siamese ? siameseCream(140) : contourMint(148), 1.3f);
+        Pen rimPen(isPointedCoat(coat) ? coatCream(coat, 140) : contourMint(148), 1.3f);
         rimPen.SetStartCap(LineCapRound); rimPen.SetEndCap(LineCapRound);
         g.DrawArc(&rimPen, -34.0f, 1.0f, 15.0f, 15.0f, 15.0f, 150.0f);
         if (physics.hindFootActive.value < 0.35f) {
@@ -634,7 +652,7 @@ private:
                                   const CatPhysics& physics, CatCoatTheme coat) {
         using namespace Gdiplus;
         Pt proj = projectHead3D(0.0f, 12.5f, 29.0f, yawRad, pitchRad);
-        Color ink = coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack();
+        Color ink = isPointedCoat(coat) ? coatPoint(coat) : catBlack();
         GraphicsState st = g.Save();
         g.TranslateTransform(proj.x, proj.y);
 
@@ -740,7 +758,7 @@ private:
         g.TranslateTransform(proj.x, proj.y);
         g.ScaleTransform(foreX, foreY);
 
-        Color faceInk = coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack();
+        Color faceInk = isPointedCoat(coat) ? coatPoint(coat) : catBlack();
 
         // Mode -1: FRIED / DAZED — vacant half-lidded eyes, drifting pupils.
         if (physics.isFried) {
@@ -875,7 +893,7 @@ private:
         float closure = physics.effectiveEyeClosure();
         if (closure > 0.02f) {
             float lidH = (ry * 2.2f) * closure;
-            SolidBrush lb(coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack());
+            SolidBrush lb(isPointedCoat(coat) ? coatPoint(coat) : catBlack());
             g.FillRectangle(&lb, -rx - 2.0f, -ry - 2.0f, rx * 2.0f + 4.0f, lidH);
         }
 
@@ -886,7 +904,7 @@ private:
     static void drawWhiskers3D(Gdiplus::Graphics& g, float yawRad, float pitchRad, const CatPhysics& physics, CatCoatTheme coat) {
         using namespace Gdiplus;
         float wiggle = std::sin(physics.time * 4.5f) * (std::max(physics.petHeadIntensity, physics.petBodyIntensity) * 1.2f);
-        Pen pen(coat == CatCoatTheme::Siamese ? siameseWhisker() : whiskerWhite(), 1.05f);
+        Pen pen(isPointedCoat(coat) ? coatWhisker(coat) : whiskerWhite(), 1.05f);
         pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
 
         const float rows[3][3] = {
@@ -939,21 +957,21 @@ private:
         using namespace Gdiplus;
         float sign = isLeft ? -1.0f : 1.0f;
 
-        if (coat == CatCoatTheme::Siamese) {
+        if (isPointedCoat(coat)) {
             GraphicsPath lp;
             addRoundedRect(lp, bottom.x - 7.5f, top.y, 15.0f, bottom.y - top.y + 1.0f, 6.5f);
             float pad = 10.0f;
             float span = std::max(1.0f, (bottom.y + 2.0f) - top.y);
             float total = span + pad * 2.0f;
-            LinearGradientBrush grad(PointF(bottom.x, top.y - pad), PointF(bottom.x, bottom.y + 2.0f + pad), siameseCream(0), siamesePoint(255));
+            LinearGradientBrush grad(PointF(bottom.x, top.y - pad), PointF(bottom.x, bottom.y + 2.0f + pad), coatCream(coat, 0), coatPoint(coat, 255));
             grad.SetWrapMode(WrapModeTileFlipXY);
-            Color cols[5] = { siameseCream(0), siameseCream(0), siameseMocha(190), siamesePoint(255), siamesePoint(255) };
+            Color cols[5] = { coatCream(coat, 0), coatCream(coat, 0), coatMocha(coat, 190), coatPoint(coat, 255), coatPoint(coat, 255) };
             REAL pos[5] = { 0.0f, pad / total, (pad + span * 0.52f) / total, (pad + span * 0.85f) / total, 1.0f };
             grad.SetInterpolationColors(cols, pos, 5);
             g.FillPath(&grad, &lp);
         }
 
-        Pen p(coat == CatCoatTheme::Siamese ? siameseOutline(158) : contourMint(), 1.45f);
+        Pen p(isPointedCoat(coat) ? coatOutline(coat, 158) : contourMint(), 1.45f);
         p.SetStartCap(LineCapRound); p.SetEndCap(LineCapRound);
 
         GraphicsPath p1;
@@ -1012,15 +1030,15 @@ private:
             PointF gStart(start.x - ux * padStart, start.y - uy * padStart);
             PointF gEnd(end.x + ux * padEnd, end.y + uy * padEnd);
 
-            LinearGradientBrush grad(gStart, gEnd, siameseCream(0), siamesePoint(255));
+            LinearGradientBrush grad(gStart, gEnd, coatCream(coat, 0), coatPoint(coat, 255));
             grad.SetWrapMode(WrapModeTileFlipXY);
             Color cols[6] = {
-                siameseCream(0),
-                siameseCream(0),
-                siameseCream(255),
-                siameseMocha(255),
-                siamesePoint(255),
-                siamesePoint(255)
+                coatCream(coat, 0),
+                coatCream(coat, 0),
+                coatCream(coat, 255),
+                coatMocha(coat, 255),
+                coatPoint(coat, 255),
+                coatPoint(coat, 255)
             };
             REAL pos[6] = {
                 0.0f,
@@ -1033,11 +1051,11 @@ private:
             grad.SetInterpolationColors(cols, pos, 6);
             g.FillPath(&grad, &limbPath);
 
-            SolidBrush pawBrush(siamesePoint());
+            SolidBrush pawBrush(coatPoint(coat));
             g.FillEllipse(&pawBrush, pawRect);
 
             const auto& outerEdge = outlineOnLeft ? rightEdge : leftEdge;
-            Pen op(siameseOutline(184), 1.25f);
+            Pen op(coatOutline(coat, 184), 1.25f);
             op.SetStartCap(LineCapRound); op.SetEndCap(LineCapRound); op.SetLineJoin(LineJoinRound);
             g.DrawLines(&op, outerEdge.data() + 3, (INT)outerEdge.size() - 4);
         }
@@ -1046,8 +1064,8 @@ private:
         int startIdx = 2;
         int endIdx = (int)((hiEdge.size() - 1) * 0.68f);
         if (endIdx > startIdx) {
-            Color sc = (coat == CatCoatTheme::Siamese)
-                ? siameseOutline((BYTE)(outlineAlpha * 199))
+            Color sc = isPointedCoat(coat)
+                ? coatOutline(coat, (BYTE)(outlineAlpha * 199))
                 : contourMint((BYTE)(outlineAlpha * 229));
             Pen hp(sc, 1.35f);
             hp.SetStartCap(LineCapRound); hp.SetEndCap(LineCapRound); hp.SetLineJoin(LineJoinRound);

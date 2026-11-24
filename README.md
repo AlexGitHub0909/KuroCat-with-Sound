@@ -50,7 +50,7 @@
 - 累瘫期间**优先于音乐音符**：音符会暂时隐藏，专注表现"死机"状态；但不影响键盘音效
 - 期间**移动鼠标或再敲任意键**可立即结束疲惫效果
 
-KuroCat 原有的功能全部保留：黑猫/暹罗猫皮肤、打字键帽跳跃、2.5D 转头、捕猎大圆眼、摸头互动、全键无冲监听、鼠标穿透、开机自启、尺寸缩放等。
+KuroCat 原有的功能全部保留：经典小黑猫 / 挖煤暹罗猫 / **樱花小猫** 三种皮肤、打字键帽跳跃、2.5D 转头、捕猎大圆眼、摸头互动、全键无冲监听、鼠标穿透、开机自启、尺寸缩放等。
 
 ## 🖥️ 平台支持
 
@@ -79,7 +79,7 @@ Windows 音乐律动监听的是**默认输出设备**的混合音频；若音�
 
 | 平台 | 直接下载 | 说明 |
 |------|----------|------|
-| Windows 10 / 11 | **[KuroCat-Windows-x64.zip](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases/download/v1.1.0/KuroCat-Windows-x64.zip)** | 来自 [v1.1.0 Release](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases/tag/v1.1.0)；仓库内 `windows/dist/` 也附带了同一份预编译包。解压后双击 `KuroCat.exe` 即可，无需安装或管理员权限 |
+| Windows 10 / 11 | **[KuroCat-Windows-x64.zip](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases/download/v1.2.0/KuroCat-Windows-x64.zip)** | 来自 [v1.2.0 Release](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases/tag/v1.2.0)；仓库内 `windows/dist/` 也附带了同一份预编译包。解压后双击 `KuroCat.exe` 即可，无需安装或管理员权限 |
 | macOS 13+ | [Releases](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases) 中的 `KuroCat-macOS-universal.zip`（若尚未提供请源码编译） | 解压后将 `KuroCat.app` 拖入「应用程序」 |
 
 Windows 解压后请保持 `KuroCat.exe` 与 `SoundThemes` 目录在一起；包内已包含全部 7 套音效样本和第三方许可声明。

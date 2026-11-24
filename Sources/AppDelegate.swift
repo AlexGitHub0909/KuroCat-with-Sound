@@ -428,6 +428,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             CatSettings.shared.eyeTheme = .neonChartreuse
         case .siamese:
             CatSettings.shared.eyeTheme = .siameseBlue
+        case .pink:
+            CatSettings.shared.eyeTheme = .warmAmber
         }
     }
 
