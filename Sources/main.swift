@@ -24,10 +24,34 @@ if let idx = CommandLine.arguments.firstIndex(of: "--render-pink-preview"),
     exit(0)
 }
 
+// Support headless corghi "Xiao Bai" preview
+if let idx = CommandLine.arguments.firstIndex(of: "--render-corgi-preview"),
+   idx + 1 < CommandLine.arguments.count {
+    let outPath = CommandLine.arguments[idx + 1]
+    renderPreviewSheet(to: outPath, forceCorgi: true)
+    exit(0)
+}
+
 // Support headless music-pulse preview (6-band spectrum + floating notes)
 if let idx = CommandLine.arguments.firstIndex(of: "--render-music-preview"),
    idx + 1 < CommandLine.arguments.count {
     renderMusicPreview(to: CommandLine.arguments[idx + 1])
+    exit(0)
+}
+
+// Corqi skin variants of the music / overload previews
+if let idx = CommandLine.arguments.firstIndex(of: "--render-corgi-music-preview"),
+   idx + 1 < CommandLine.arguments.count {
+    CatSettings.shared.coatTheme = .corgi
+    CatSettings.shared.eyeTheme = .warmAmber
+    renderMusicPreview(to: CommandLine.arguments[idx + 1])
+    exit(0)
+}
+if let idx = CommandLine.arguments.firstIndex(of: "--render-corgi-overload-preview"),
+   idx + 1 < CommandLine.arguments.count {
+    CatSettings.shared.coatTheme = .corgi
+    CatSettings.shared.eyeTheme = .warmAmber
+    renderOverloadPreview(to: CommandLine.arguments[idx + 1])
     exit(0)
 }
 
@@ -61,11 +85,15 @@ if let idx = CommandLine.arguments.firstIndex(of: "--render-showcase-video"),
     exit(0)
 }
 
-func renderPreviewSheet(to path: String, forceSiamese: Bool = false, forcePink: Bool = false) {
+func renderPreviewSheet(to path: String, forceSiamese: Bool = false, forcePink: Bool = false, forceCorgi: Bool = false) {
     let prevCoat = CatSettings.shared.coatTheme
     let prevEye = CatSettings.shared.eyeTheme
     let prevKb = CatSettings.shared.keyboardTheme
-    if forcePink {
+    if forceCorgi {
+        CatSettings.shared.coatTheme = .corgi
+        CatSettings.shared.eyeTheme = .warmAmber
+        CatSettings.shared.keyboardTheme = .classicMilk
+    } else if forcePink {
         CatSettings.shared.coatTheme = .pink
         CatSettings.shared.eyeTheme = .warmAmber
         CatSettings.shared.keyboardTheme = .classicMilk
