@@ -30,42 +30,13 @@ enum CatRenderer {
     static let pinkOutline = NSColor(calibratedRed: 0.66, green: 0.28, blue: 0.48, alpha: 0.88)
     static let pinkWhisker = NSColor(calibratedRed: 0.66, green: 0.35, blue: 0.52, alpha: 0.68)
 
-    // Corgi "小白" palette — matched to the approved anime key visual (V2):
-    // light creamy ginger + milk white, dark-brown nose/eyes.
-    static let corgiWhite   = NSColor(calibratedRed: 1.000, green: 0.976, blue: 0.937, alpha: 1.0) // V2 milk white
-    static let corgiCream   = NSColor(calibratedRed: 0.965, green: 0.918, blue: 0.840, alpha: 1.0) // soft cream shading
-    static let corgiGinger  = NSColor(calibratedRed: 0.918, green: 0.672, blue: 0.402, alpha: 1.0) // V2 light creamy ginger
-    static let corgiGingerDeep = NSColor(calibratedRed: 0.824, green: 0.552, blue: 0.290, alpha: 1.0) // ear/back shadow
-    static let corgiNose    = NSColor(calibratedRed: 0.235, green: 0.160, blue: 0.125, alpha: 1.0) // dark brown nose
-    static let corgiOutline = NSColor(calibratedRed: 0.50,  green: 0.345, blue: 0.230, alpha: 0.85)
-    static let corgiWhisker = NSColor(calibratedRed: 0.50,  green: 0.40,  blue: 0.31,  alpha: 0.62)
-
-    static func isCorgi(_ coat: CatCoatTheme) -> Bool { coat == .corgi }
-    static func isPointedCoat(_ coat: CatCoatTheme) -> Bool { coat != .classicBlack && coat != .corgi }
-    static func coatCream(_ coat: CatCoatTheme) -> NSColor {
-        if isCorgi(coat) { return corgiWhite }
-        return coat == .pink ? pinkCream : siameseCream
-    }
-    static func coatLatte(_ coat: CatCoatTheme) -> NSColor {
-        if isCorgi(coat) { return corgiCream }
-        return coat == .pink ? pinkLatte : siameseLatte
-    }
-    static func coatMocha(_ coat: CatCoatTheme) -> NSColor {
-        if isCorgi(coat) { return corgiGinger }
-        return coat == .pink ? pinkMocha : siameseMocha
-    }
-    static func coatPoint(_ coat: CatCoatTheme) -> NSColor {
-        if isCorgi(coat) { return corgiNose }
-        return coat == .pink ? pinkPoint : siamesePoint
-    }
-    static func coatOutline(_ coat: CatCoatTheme) -> NSColor {
-        if isCorgi(coat) { return corgiOutline }
-        return coat == .pink ? pinkOutline : siameseOutline
-    }
-    static func coatWhisker(_ coat: CatCoatTheme) -> NSColor {
-        if isCorgi(coat) { return corgiWhisker }
-        return coat == .pink ? pinkWhisker : siameseWhisker
-    }
+    static func isPointedCoat(_ coat: CatCoatTheme) -> Bool { coat != .classicBlack }
+    static func coatCream(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkCream : siameseCream }
+    static func coatLatte(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkLatte : siameseLatte }
+    static func coatMocha(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkMocha : siameseMocha }
+    static func coatPoint(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkPoint : siamesePoint }
+    static func coatOutline(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkOutline : siameseOutline }
+    static func coatWhisker(_ coat: CatCoatTheme) -> NSColor { coat == .pink ? pinkWhisker : siameseWhisker }
 
     static let permissionPillRect = CGRect(x: 92, y: 294, width: 176, height: 22)
 
@@ -113,15 +84,6 @@ enum CatRenderer {
         let breath = sin(physics.time * 2.1) * 1.6
         let seatX = CatPhysics.seatAnchor.x + physics.bodyShiftX.value
         let seatY = CatPhysics.seatAnchor.y
-
-        // Xiao Bai needs a completely different anatomy (fox wedge head, long low
-        // body, stubby legs). Keep every physics-driven behaviour, but use a
-        // dedicated dog scene instead of recolouring the cat skeleton.
-        if isCorgi(coat) {
-            drawCorgiScene(in: ctx, physics: physics, showPermissionPill: showPermissionPill)
-            ctx.restoreGState()
-            return
-        }
 
         // 1. Mini White Mouse (left of keyboard)
         drawMouse(in: ctx, physics: physics, theme: settings.keyboardTheme)
@@ -398,27 +360,6 @@ enum CatRenderer {
     // MARK: - Tail
 
     private static func drawTail(in ctx: CGContext, seatX: CGFloat, seatY: CGFloat, physics: CatPhysics, coat: CatCoatTheme) {
-        if isCorgi(coat) {
-            // Xiao Bai's short little nub tail — wags enthusiastically but barely sticks out.
-            let wag = sin(physics.tailPhase * 1.4) * 6.0
-            let root = CGPoint(x: seatX + 40, y: seatY - 8)
-            let tip = CGPoint(x: seatX + 54 + wag * 0.6, y: seatY - 20 + wag)
-            ctx.saveGState()
-            ctx.setStrokeColor(corgiGinger.cgColor)
-            ctx.setLineWidth(10)
-            ctx.setLineCap(.round)
-            ctx.move(to: root)
-            ctx.addQuadCurve(to: tip, control: CGPoint(x: seatX + 52, y: seatY - 10))
-            ctx.strokePath()
-            // white tip
-            ctx.setStrokeColor(corgiWhite.cgColor)
-            ctx.setLineWidth(8)
-            ctx.move(to: CGPoint(x: tip.x - 3, y: tip.y + 3))
-            ctx.addLine(to: tip)
-            ctx.strokePath()
-            ctx.restoreGState()
-            return
-        }
         let p = physics.tailPhase
         let hunt = max(0, min(1, physics.huntIntensity.value))
         let wag1 = sin(p) * (8.0 + hunt * 5.5)
@@ -510,84 +451,6 @@ enum CatRenderer {
             ctx.setFillColor(catBlack.cgColor)
             ctx.addPath(path)
             ctx.fillPath()
-        } else if isCorgi(coat) {
-            // Xiao Bai: white chest/belly with a ginger saddle across the back & shoulders.
-            ctx.addPath(path)
-            ctx.clip()
-            let cs = CGColorSpaceCreateDeviceRGB()
-
-            // Warm white base
-            let bodyColors = [corgiWhite.cgColor, corgiCream.cgColor] as CFArray
-            if let grad = CGGradient(colorsSpace: cs, colors: bodyColors, locations: [0.1, 1.0]) {
-                ctx.drawLinearGradient(
-                    grad,
-                    start: CGPoint(x: seatX, y: headCenter.y - 34),
-                    end: CGPoint(x: seatX, y: seatY + 18),
-                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
-                )
-            }
-            // Ginger saddle: a broad soft-edged orange band across the upper back,
-            // stopping short of the white chest in the middle-front.
-            ctx.saveGState()
-            let saddle = CGMutablePath()
-            saddle.move(to: CGPoint(x: seatX - 60, y: seatY - 2))
-            saddle.addQuadCurve(to: CGPoint(x: seatX - 44, y: seatY - 46),
-                                control: CGPoint(x: seatX - 60, y: seatY - 34))
-            saddle.addQuadCurve(to: CGPoint(x: seatX + 44, y: seatY - 46),
-                                control: CGPoint(x: seatX, y: seatY - 62))
-            saddle.addQuadCurve(to: CGPoint(x: seatX + 60, y: seatY - 2),
-                                control: CGPoint(x: seatX + 60, y: seatY - 34))
-            saddle.addQuadCurve(to: CGPoint(x: seatX - 60, y: seatY - 2),
-                                control: CGPoint(x: seatX, y: seatY + 2))
-            saddle.closeSubpath()
-            let saddleColors = [corgiGinger.cgColor, corgiGingerDeep.cgColor] as CFArray
-            if let sg = CGGradient(colorsSpace: cs, colors: saddleColors, locations: [0.0, 1.0]) {
-                ctx.saveGState()
-                ctx.addPath(saddle)
-                ctx.clip()
-                ctx.drawLinearGradient(sg,
-                                       start: CGPoint(x: seatX, y: seatY - 50),
-                                       end: CGPoint(x: seatX, y: seatY + 6),
-                                       options: [])
-                ctx.restoreGState()
-            }
-            ctx.restoreGState()
-
-            // White chest blaze rising from the belly up between the ginger shoulders.
-            ctx.setFillColor(corgiWhite.cgColor)
-            let chest = CGMutablePath()
-            chest.move(to: CGPoint(x: seatX - 15, y: seatY + 14))
-            chest.addQuadCurve(to: CGPoint(x: seatX - 9, y: seatY - 34),
-                               control: CGPoint(x: seatX - 16, y: seatY - 12))
-            chest.addQuadCurve(to: CGPoint(x: seatX + 9, y: seatY - 34),
-                               control: CGPoint(x: seatX, y: seatY - 44))
-            chest.addQuadCurve(to: CGPoint(x: seatX + 15, y: seatY + 14),
-                               control: CGPoint(x: seatX + 16, y: seatY - 12))
-            chest.closeSubpath()
-            ctx.addPath(chest)
-            ctx.fillPath()
-
-            // Ginger face patches around the eyes + white forehead blaze (drawn in head space).
-            let yawRad = yaw * 0.50
-            let pitchRad = pitch * 0.36
-            ctx.saveGState()
-            ctx.translateBy(x: headCenter.x, y: headCenter.y)
-            ctx.rotate(by: hTilt)
-            for sgn in [-1.0, 1.0] as [CGFloat] {
-                let patch = projectHead3D(x: sgn * 17.0, y: -1.0, z: 27.0,
-                                          yawRad: yawRad, pitchRad: pitchRad).pt
-                ctx.setFillColor(corgiGinger.withAlphaComponent(0.92).cgColor)
-                ctx.saveGState()
-                ctx.translateBy(x: patch.x, y: patch.y)
-                ctx.scaleBy(x: max(0.7, cos(yawRad * 0.6)), y: 1.0)
-                ctx.fillEllipse(in: CGRect(x: -11.5, y: -11.0, width: 23, height: 22))
-                ctx.restoreGState()
-            }
-            // Central white blaze down the forehead.
-            let blaze = projectHead3D(x: 0, y: -14, z: 27.5, yawRad: yawRad, pitchRad: pitchRad).pt
-            ctx.setFillColor(corgiWhite.cgColor)
-            ctx.fillEllipse(in: CGRect(x: blaze.x - 4.2, y: blaze.y - 16, width: 8.4, height: 30))
-            ctx.restoreGState()
         } else {
             // Siamese warm oat-milk cream gradient + soft toasted back shading + 2.5D rotating seal-point face mask!
             ctx.addPath(path)
@@ -637,10 +500,10 @@ enum CatRenderer {
         }
         ctx.restoreGState()
 
-        // Crisp subtle outline so light coats pop on light & dark wallpapers!
-        if isPointedCoat(coat) || isCorgi(coat) {
+        // Crisp subtle warm-cocoa outline around Siamese cream body so it pops on light & dark wallpapers!
+        if isPointedCoat(coat) {
             ctx.saveGState()
-            ctx.setStrokeColor((isCorgi(coat) ? corgiOutline : coatOutline(coat)).cgColor)
+            ctx.setStrokeColor(coatOutline(coat).cgColor)
             ctx.setLineWidth(1.5)
             ctx.addPath(path)
             ctx.strokePath()
@@ -652,7 +515,7 @@ enum CatRenderer {
         ctx.translateBy(x: seatX, y: seatY)
         ctx.rotate(by: bTilt)
         ctx.scaleBy(x: sx, y: sy)
-        ctx.setFillColor((isCorgi(coat) ? corgiWhite : (isPointedCoat(coat) ? coatPoint(coat) : catBlack)).cgColor)
+        ctx.setFillColor((isPointedCoat(coat) ? coatPoint(coat) : catBlack).cgColor)
 
         ctx.fillEllipse(in: CGRect(x: -35, y: 3, width: 17, height: 11))
         if physics.hindFootActive.value < 0.35 {
@@ -660,8 +523,7 @@ enum CatRenderer {
         }
 
         // Subtle bottom rim highlights on tucked haunches
-        let rimColor = isCorgi(coat) ? corgiCream.withAlphaComponent(0.8)
-            : (isPointedCoat(coat) ? coatCream(coat).withAlphaComponent(0.55) : contourMint.withAlphaComponent(0.58))
+        let rimColor = isPointedCoat(coat) ? coatCream(coat).withAlphaComponent(0.55) : contourMint.withAlphaComponent(0.58)
         ctx.setStrokeColor(rimColor.cgColor)
         ctx.setLineWidth(1.3)
         ctx.setLineCap(.round)
@@ -737,69 +599,9 @@ enum CatRenderer {
         let fold = physics.earFold.value
         let twitch = physics.earTwitch.value * 0.045
 
-        if isCorgi(coat) {
-            // Xiao Bai's big upright triangular ears — left tip flops slightly outward.
-            drawCorgiEar(in: ctx, isLeft: true, yawRad: yawRad, pitchRad: pitchRad, twitch: twitch)
-            drawCorgiEar(in: ctx, isLeft: false, yawRad: yawRad, pitchRad: pitchRad, twitch: -twitch)
-        } else {
-            drawEar3D(in: ctx, isLeft: true, yawRad: yawRad, pitchRad: pitchRad, fold: fold, twitch: twitch, coat: coat)
-            drawEar3D(in: ctx, isLeft: false, yawRad: yawRad, pitchRad: pitchRad, fold: fold, twitch: -twitch, coat: coat)
-        }
+        drawEar3D(in: ctx, isLeft: true, yawRad: yawRad, pitchRad: pitchRad, fold: fold, twitch: twitch, coat: coat)
+        drawEar3D(in: ctx, isLeft: false, yawRad: yawRad, pitchRad: pitchRad, fold: fold, twitch: -twitch, coat: coat)
 
-        ctx.restoreGState()
-    }
-
-    /// Corgi upright ear: broad base, tall tapering tip, soft inner shell. The viewer-left
-    /// ear tilts out a touch to match Xiao Bai's signature slightly-flopped left ear.
-    private static func drawCorgiEar(
-        in ctx: CGContext,
-        isLeft: Bool,
-        yawRad: CGFloat,
-        pitchRad: CGFloat,
-        twitch: CGFloat
-    ) {
-        let sign: CGFloat = isLeft ? -1.0 : 1.0
-        let outFlop: CGFloat = isLeft ? -0.16 : 0.04  // left ear leans outward a bit
-        let lean = outFlop + twitch * 0.6
-
-        let baseIn  = projectHead3D(x: sign * 8.0,  y: -17.0, z: 1.0,  yawRad: yawRad, pitchRad: pitchRad).pt
-        let baseOut = projectHead3D(x: sign * 38.0, y: -6.0,  z: -2.0, yawRad: yawRad, pitchRad: pitchRad).pt
-        let tip     = projectHead3D(x: sign * (24.0) + sin(lean) * 16.0,
-                                    y: -20.0 - cos(lean) * 40.0,
-                                    z: -2.0, yawRad: yawRad, pitchRad: pitchRad).pt
-
-        // Outer ginger ear
-        let ear = CGMutablePath()
-        ear.move(to: baseIn)
-        ear.addQuadCurve(to: CGPoint(x: tip.x - sign * 3.0, y: tip.y + 3.0),
-                         control: CGPoint(x: (baseIn.x + tip.x) * 0.5 - sign * 3.0, y: (baseIn.y + tip.y) * 0.5 - 4.0))
-        ear.addQuadCurve(to: CGPoint(x: tip.x + sign * 3.0, y: tip.y + 3.5),
-                         control: CGPoint(x: tip.x, y: tip.y - 2.5))
-        ear.addQuadCurve(to: baseOut,
-                         control: CGPoint(x: (tip.x + baseOut.x) * 0.5 + sign * 4.0, y: (tip.y + baseOut.y) * 0.5 - 3.0))
-        ear.addQuadCurve(to: baseIn, control: CGPoint(x: (baseOut.x + baseIn.x) * 0.5, y: -14.0))
-        ear.closeSubpath()
-
-        ctx.saveGState()
-        ctx.setFillColor(corgiGinger.cgColor)
-        ctx.addPath(ear)
-        ctx.fillPath()
-        ctx.setStrokeColor(corgiOutline.withAlphaComponent(0.55).cgColor)
-        ctx.setLineWidth(1.2)
-        ctx.strokePath()
-
-        // Warm cream inner ear, inset toward the tip.
-        let inner = CGMutablePath()
-        let innerTip = CGPoint(x: tip.x - sign * 1.0, y: tip.y + 9.0)
-        inner.move(to: CGPoint(x: baseIn.x + sign * 7.0, y: baseIn.y - 2.0))
-        inner.addQuadCurve(to: innerTip,
-                           control: CGPoint(x: (baseIn.x + innerTip.x) * 0.5 - sign * 1.0, y: (baseIn.y + innerTip.y) * 0.5))
-        inner.addQuadCurve(to: CGPoint(x: baseOut.x - sign * 6.0, y: baseOut.y - 4.0),
-                           control: CGPoint(x: innerTip.x + sign * 4.0, y: innerTip.y + 8.0))
-        inner.closeSubpath()
-        ctx.setFillColor(corgiCream.cgColor)
-        ctx.addPath(inner)
-        ctx.fillPath()
         ctx.restoreGState()
     }
 
@@ -907,60 +709,6 @@ enum CatRenderer {
         }
     }
 
-    /// Xiao Bai's muzzle: a soft white snout, dark-brown nose and a gentle smiling mouth.
-    /// Drawn in head-local 3D space so it turns with the face.
-    private static func drawCorgiMuzzle(
-        in ctx: CGContext,
-        yawRad: CGFloat,
-        pitchRad: CGFloat,
-        physics: CatPhysics
-    ) {
-        let m = projectHead3D(x: 0, y: 10.5, z: 29.0, yawRad: yawRad, pitchRad: pitchRad).pt
-        ctx.saveGState()
-        ctx.translateBy(x: m.x, y: m.y)
-        ctx.scaleBy(x: max(0.72, cos(yawRad * 0.65)), y: 1.0)
-
-        // White rounded muzzle (two soft lobes).
-        ctx.setFillColor(corgiWhite.cgColor)
-        ctx.fillEllipse(in: CGRect(x: -9.5, y: -2.0, width: 11, height: 9))
-        ctx.fillEllipse(in: CGRect(x: -1.5, y: -2.0, width: 11, height: 9))
-
-        // Dark brown triangular nose.
-        ctx.setFillColor(corgiNose.cgColor)
-        let nose = CGMutablePath()
-        nose.move(to: CGPoint(x: -4.0, y: -4.6))
-        nose.addQuadCurve(to: CGPoint(x: 4.0, y: -4.6), control: CGPoint(x: 0, y: -3.2))
-        nose.addQuadCurve(to: CGPoint(x: 0, y: 1.2), control: CGPoint(x: 2.2, y: 1.0))
-        nose.addQuadCurve(to: CGPoint(x: -4.0, y: -4.6), control: CGPoint(x: -2.2, y: 1.0))
-        nose.closeSubpath()
-        ctx.addPath(nose)
-        ctx.fillPath()
-        // tiny nose highlight
-        ctx.setFillColor(NSColor.white.withAlphaComponent(0.5).cgColor)
-        ctx.fillEllipse(in: CGRect(x: -2.4, y: -4.0, width: 2.0, height: 1.3))
-
-        // Philtrum + smiling cheeks (skip the curled smile while fried/straining — overload mouth takes over).
-        ctx.setStrokeColor(corgiOutline.cgColor)
-        ctx.setLineWidth(1.2)
-        ctx.setLineCap(.round)
-        ctx.move(to: CGPoint(x: 0, y: 1.0))
-        ctx.addLine(to: CGPoint(x: 0, y: 3.0))
-        ctx.strokePath()
-        if !physics.isFried && !physics.isStraining {
-            ctx.move(to: CGPoint(x: 0, y: 3.0))
-            ctx.addQuadCurve(to: CGPoint(x: 5.2, y: 3.4), control: CGPoint(x: 2.8, y: 6.0))
-            ctx.move(to: CGPoint(x: 0, y: 3.0))
-            ctx.addQuadCurve(to: CGPoint(x: -5.2, y: 3.4), control: CGPoint(x: -2.8, y: 6.0))
-            ctx.strokePath()
-            // Little tongue tip — Xiao Bai is often caught with tongue out.
-            if sin(physics.time * 1.3) > 0.4 {
-                ctx.setFillColor(NSColor(calibratedRed: 0.92, green: 0.42, blue: 0.48, alpha: 0.95).cgColor)
-                ctx.fillEllipse(in: CGRect(x: -1.8, y: 4.2, width: 3.6, height: 4.2))
-            }
-        }
-        ctx.restoreGState()
-    }
-
     // MARK: - 2.5D Head Features (Luminous Eyes & Whiskers)
 
     private static func drawHeadFeatures(
@@ -982,11 +730,6 @@ enum CatRenderer {
         // 1. 3D-Projected Eyes with authentic spherical foreshortening & parallax!
         drawEye3D(in: ctx, isLeft: true, yawRad: yawRad, pitchRad: pitchRad, physics: physics, eyeTheme: eyeTheme, coat: coat)
         drawEye3D(in: ctx, isLeft: false, yawRad: yawRad, pitchRad: pitchRad, physics: physics, eyeTheme: eyeTheme, coat: coat)
-
-        // 1a. Corgi muzzle: white snout + dark-brown nose + happy smile (Xiao Bai's look).
-        if isCorgi(coat) {
-            drawCorgiMuzzle(in: ctx, yawRad: yawRad, pitchRad: pitchRad, physics: physics)
-        }
 
         // 1b. Overload mouth: gritted teeth when straining, flat dazed line when fried.
         if physics.isFried || physics.isStraining {
@@ -1192,10 +935,7 @@ enum CatRenderer {
         coat: CatCoatTheme
     ) {
         let sign: CGFloat = isLeft ? -1.0 : 1.0
-        // Xiao Bai has deep brown round eyes, not the neon feline iris.
-        let eyeColor: NSColor = isCorgi(coat)
-            ? NSColor(calibratedRed: 0.24, green: 0.145, blue: 0.085, alpha: 1.0)
-            : eyeTheme.primaryColor
+        let eyeColor = eyeTheme.primaryColor
 
         // Eye sits on the front surface of the 3D head sphere at (±17.5, -2.0, +28.0)
         let proj = projectHead3D(x: sign * 17.2, y: -2.0, z: 27.5, yawRad: yawRad, pitchRad: pitchRad)
@@ -1402,8 +1142,7 @@ enum CatRenderer {
     ) {
         let wiggle = sin(physics.time * 4.5) * (max(physics.petHeadIntensity, physics.petBodyIntensity) * 1.2)
         ctx.saveGState()
-        let wColor = isCorgi(coat) ? corgiWhisker
-            : (isPointedCoat(coat) ? coatWhisker(coat) : whiskerColor.withAlphaComponent(0.68))
+        let wColor = isPointedCoat(coat) ? coatWhisker(coat) : whiskerColor.withAlphaComponent(0.68)
         ctx.setStrokeColor(wColor.cgColor)
         ctx.setLineWidth(1.0)
         ctx.setLineCap(.round)
@@ -1495,13 +1234,7 @@ enum CatRenderer {
         let sign: CGFloat = isLeft ? -1.0 : 1.0
         ctx.saveGState()
 
-        if isCorgi(coat) {
-            // White tucked socks
-            let legRect = CGRect(x: bottom.x - 7.5, y: top.y, width: 15.0, height: bottom.y - top.y + 1.0)
-            ctx.setFillColor(corgiWhite.cgColor)
-            ctx.addPath(CGPath(roundedRect: legRect, cornerWidth: 6.5, cornerHeight: 6.5, transform: nil))
-            ctx.fillPath()
-        } else if isPointedCoat(coat) {
+        if isPointedCoat(coat) {
             // Creamy upper leg dipping smoothly into adorable seal-point chocolate socks at the bottom!
             let legRect = CGRect(x: bottom.x - 7.5, y: top.y, width: 15.0, height: bottom.y - top.y + 1.0)
             let legPath = CGPath(roundedRect: legRect, cornerWidth: 6.5, cornerHeight: 6.5, transform: nil)
@@ -1584,17 +1317,7 @@ enum CatRenderer {
         let pawRect = CGRect(x: end.x - pawR, y: end.y - pawR * 0.85, width: pawR * 2, height: pawR * 1.7)
 
         ctx.saveGState()
-        if isCorgi(coat) {
-            // White socks — Xiao Bai's legs and paws are creamy white.
-            ctx.setFillColor(corgiWhite.cgColor)
-            ctx.addPath(limbPath)
-            ctx.fillPath()
-            ctx.fillEllipse(in: pawRect)
-            ctx.setStrokeColor(corgiCream.cgColor)
-            ctx.setLineWidth(1.0)
-            ctx.addPath(limbPath)
-            ctx.strokePath()
-        } else if coat == .classicBlack {
+        if coat == .classicBlack {
             ctx.setFillColor(catBlack.cgColor)
             ctx.addPath(limbPath)
             ctx.fillPath()
@@ -1907,663 +1630,5 @@ enum CatRenderer {
             )
             ctx.restoreGState()
         }
-    }
-
-    // MARK: - Corgi "Xiao Bai" dedicated renderer
-    // Modelled on the actual photos: broad white blaze from crown to nose,
-    // small almond brown eyes inside ginger patches, wide upright ears,
-    // long low ginger-and-white body with a heavy white ruff and stubby legs.
-
-    private static func drawCorgiScene(
-        in ctx: CGContext,
-        physics: CatPhysics,
-        showPermissionPill: Bool
-    ) {
-        let settings = CatSettings.shared
-        let seatX = CatPhysics.seatAnchor.x + physics.bodyShiftX.value
-        let seatY = CatPhysics.seatAnchor.y
-        let breath = sin(physics.time * 2.1) * 1.6
-
-        drawMouse(in: ctx, physics: physics, theme: settings.keyboardTheme)
-        drawKeyboard(in: ctx, physics: physics, theme: settings.keyboardTheme, eyeTheme: settings.eyeTheme)
-        if physics.equalizerPresence > 0.01 {
-            drawMusicEqualizer(in: ctx, physics: physics, eyeTheme: settings.eyeTheme)
-        }
-
-        let headCenter = CGPoint(
-            x: seatX + physics.bodyTilt.value * 36 + physics.headYaw.value * 7.5,
-            y: 126 + physics.headOffsetY.value + physics.headPitch.value * 4.8 + breath * 1.1
-                - physics.musicBounce
-        )
-
-        drawCorgiTail(in: ctx, seatX: seatX, seatY: seatY, physics: physics)
-        drawCorgiBody(in: ctx, seatX: seatX, seatY: seatY, physics: physics, breath: breath)
-        drawCorgiHead(in: ctx, center: headCenter, physics: physics, eyeTheme: settings.eyeTheme)
-
-        if physics.hindFootActive.value > 0.03 {
-            drawHindFoot(in: ctx, seatX: seatX, seatY: seatY, physics: physics, coat: .corgi)
-        }
-        drawCorgiPaws(in: ctx, seatX: seatX, seatY: seatY, breath: breath, physics: physics)
-
-        if settings.showKeyBadges { drawFloatingKeycaps(in: ctx, physics: physics) }
-        if !physics.musicNotes.isEmpty && !physics.isFried {
-            drawMusicNotes(in: ctx, physics: physics, eyeTheme: settings.eyeTheme)
-        }
-        drawSparkles(in: ctx, physics: physics, eyeTheme: settings.eyeTheme)
-        drawSmoke(in: ctx, physics: physics)
-        if showPermissionPill { drawPermissionPill(in: ctx) }
-    }
-
-    /// Short docked tail — barely visible, wags hard when excited.
-    private static func drawCorgiTail(in ctx: CGContext, seatX: CGFloat, seatY: CGFloat, physics: CatPhysics) {
-        let wag = sin(physics.tailPhase * 1.5) * 7.0
-        let root = CGPoint(x: seatX + 46, y: seatY - 22)
-        let tip = CGPoint(x: seatX + 60 + wag * 0.5, y: seatY - 34 + wag * 0.7)
-        ctx.saveGState()
-        ctx.setStrokeColor(corgiGinger.cgColor)
-        ctx.setLineWidth(12)
-        ctx.setLineCap(.round)
-        ctx.move(to: root)
-        ctx.addQuadCurve(to: tip, control: CGPoint(x: seatX + 60, y: seatY - 22))
-        ctx.strokePath()
-        ctx.setStrokeColor(corgiWhite.cgColor)
-        ctx.setLineWidth(7)
-        ctx.move(to: CGPoint(x: tip.x - 3, y: tip.y + 4))
-        ctx.addLine(to: tip)
-        ctx.strokePath()
-        ctx.restoreGState()
-    }
-
-    /// Long, low, broad-chested body: ginger flanks + white ruff and belly.
-    private static func drawCorgiBody(
-        in ctx: CGContext,
-        seatX: CGFloat,
-        seatY: CGFloat,
-        physics: CatPhysics,
-        breath: CGFloat
-    ) {
-        let bTilt = physics.bodyTilt.value
-        let sy = physics.bodySquash.value
-        let sx = 1.0 + (1.0 - sy) * 0.55
-        let cB = cos(bTilt), sB = sin(bTilt)
-        func B(_ lx: CGFloat, _ ly: CGFloat) -> CGPoint {
-            CGPoint(
-                x: seatX + lx * sx * cB - ly * sy * sB,
-                y: seatY + lx * sx * sB + ly * sy * cB
-            )
-        }
-
-        let body = CGMutablePath()
-        body.move(to: B(-30, -82 + breath * 0.3))
-        body.addCurve(to: B(-63, -42), control1: B(-48, -79), control2: B(-64, -64))
-        body.addCurve(to: B(-50, 11), control1: B(-67, -15), control2: B(-58, 2))
-        body.addLine(to: B(50, 11))
-        body.addCurve(to: B(63, -42), control1: B(58, 2), control2: B(67, -15))
-        body.addCurve(to: B(30, -82 + breath * 0.3), control1: B(64, -64), control2: B(48, -79))
-        body.closeSubpath()
-
-        ctx.saveGState()
-        ctx.addPath(body)
-        ctx.clip()
-
-        let cs = CGColorSpaceCreateDeviceRGB()
-        let ginger = [corgiGinger.cgColor, corgiGingerDeep.cgColor] as CFArray
-        if let g = CGGradient(colorsSpace: cs, colors: ginger, locations: [0.0, 1.0]) {
-            ctx.drawLinearGradient(g, start: B(0, -86), end: B(0, 12), options: [])
-        }
-
-        // Broad white chest with a deep U-shaped ruff under the chin.
-        let chest = CGMutablePath()
-        chest.move(to: B(-40, -84))
-        chest.addQuadCurve(to: B(40, -84), control: B(0, -54))
-        chest.addCurve(to: B(23, 14), control1: B(37, -34), control2: B(30, 2))
-        chest.addQuadCurve(to: B(-23, 14), control: B(0, 20))
-        chest.addCurve(to: B(-40, -84), control1: B(-30, 2), control2: B(-37, -34))
-        chest.closeSubpath()
-        let whites = [corgiWhite.cgColor, corgiCream.cgColor] as CFArray
-        if let wg = CGGradient(colorsSpace: cs, colors: whites, locations: [0.15, 1.0]) {
-            ctx.saveGState()
-            ctx.addPath(chest)
-            ctx.clip()
-            ctx.drawLinearGradient(wg, start: B(0, -86), end: B(0, 14), options: [])
-            ctx.restoreGState()
-        }
-        ctx.setFillColor(corgiWhite.cgColor)
-        ctx.addPath(chest)
-        ctx.fillPath()
-
-        // V2 plush chest ruff: layered fluffy tufts scalloping the white bib edge.
-        ctx.setFillColor(corgiWhite.cgColor)
-        let ruff = CGMutablePath()
-        // left flank tufts climbing up toward the cheek
-        ruff.move(to: B(-40, -70))
-        ruff.addQuadCurve(to: B(-46, -52), control: B(-50, -64))
-        ruff.addQuadCurve(to: B(-40, -40), control: B(-48, -44))
-        ruff.addQuadCurve(to: B(-45, -26), control: B(-44, -32))
-        ruff.addQuadCurve(to: B(-34, -20), control: B(-41, -19))
-        // across the upper bib under the chin
-        ruff.addQuadCurve(to: B(-22, -30), control: B(-30, -24))
-        ruff.addQuadCurve(to: B(-11, -34), control: B(-17, -28))
-        ruff.addQuadCurve(to: B(0, -38), control: B(-6, -30))
-        ruff.addQuadCurve(to: B(11, -34), control: B(6, -30))
-        ruff.addQuadCurve(to: B(22, -30), control: B(17, -28))
-        // right flank tufts
-        ruff.addQuadCurve(to: B(34, -20), control: B(30, -24))
-        ruff.addQuadCurve(to: B(45, -26), control: B(41, -19))
-        ruff.addQuadCurve(to: B(40, -40), control: B(44, -32))
-        ruff.addQuadCurve(to: B(46, -52), control: B(48, -44))
-        ruff.addQuadCurve(to: B(40, -70), control: B(50, -64))
-        ruff.addQuadCurve(to: B(-40, -70), control: B(0, -84))
-        ruff.closeSubpath()
-        ctx.addPath(ruff)
-        ctx.fillPath()
-        // Sparse, short fur seams following the ruff — subtle, not scratchy.
-        ctx.setStrokeColor(corgiCream.withAlphaComponent(0.7).cgColor)
-        ctx.setLineWidth(1.2)
-        ctx.setLineCap(.round)
-        for k in [-1.0, 0.0, 1.0] as [CGFloat] {
-            let x = k * 13
-            ctx.move(to: B(x, -58 + abs(x) * 0.3))
-            ctx.addQuadCurve(to: B(x + 2, -51 + abs(x) * 0.3),
-                             control: B(x + 1, -55 + abs(x) * 0.3))
-        }
-        ctx.strokePath()
-        ctx.restoreGState()
-
-        ctx.saveGState()
-        ctx.setStrokeColor(corgiOutline.withAlphaComponent(0.45).cgColor)
-        ctx.setLineWidth(1.4)
-        ctx.addPath(body)
-        ctx.strokePath()
-        ctx.restoreGState()
-
-        // Tucked hind paws peeking under the belly.
-        ctx.saveGState()
-        ctx.setFillColor(corgiWhite.cgColor)
-        let lp = B(-31, 7), rp = B(31, 7)
-        ctx.fillEllipse(in: CGRect(x: lp.x - 9, y: lp.y - 4, width: 19, height: 11))
-        if physics.hindFootActive.value < 0.35 {
-            ctx.fillEllipse(in: CGRect(x: rp.x - 10, y: rp.y - 4, width: 19, height: 11))
-        }
-        ctx.restoreGState()
-    }
-
-    /// 2.5D projection reused for the dog head so ears/eyes turn with the head.
-    private static func corgiProject(
-        x: CGFloat, y: CGFloat, z: CGFloat,
-        yawRad: CGFloat, pitchRad: CGFloat
-    ) -> CGPoint {
-        let cy = cos(yawRad), sy = sin(yawRad)
-        let x1 = x * cy + z * sy
-        let z1 = -x * sy + z * cy
-        let cp = cos(pitchRad), sp = sin(pitchRad)
-        return CGPoint(x: x1, y: y * cp + z1 * sp)
-    }
-
-    private static func drawCorgiHead(
-        in ctx: CGContext,
-        center: CGPoint,
-        physics: CatPhysics,
-        eyeTheme: EyeColorTheme
-    ) {
-        let yawRad = physics.headYaw.value * 0.50
-        let pitchRad = physics.headPitch.value * 0.36
-
-        ctx.saveGState()
-        ctx.translateBy(x: center.x, y: center.y)
-        ctx.rotate(by: physics.headTilt.value)
-
-        // Wide upright ears sit behind the skull.
-        drawCorgiEarEx(in: ctx, sign: -1, yawRad: yawRad, pitchRad: pitchRad, physics: physics)
-        drawCorgiEarEx(in: ctx, sign: 1, yawRad: yawRad, pitchRad: pitchRad, physics: physics)
-
-        // Rounded corgi head (V2): soft broad crown, plump cheeks, short wedge muzzle.
-        // Not a sharp fox wedge — Xiao Bai's anime face is wide and gently tapered.
-        let skull = CGMutablePath()
-        skull.move(to: CGPoint(x: -36, y: -12))
-        skull.addCurve(to: CGPoint(x: 0, y: -33),
-                       control1: CGPoint(x: -34, y: -30), control2: CGPoint(x: -18, y: -34))
-        skull.addCurve(to: CGPoint(x: 36, y: -12),
-                       control1: CGPoint(x: 18, y: -34), control2: CGPoint(x: 34, y: -30))
-        skull.addCurve(to: CGPoint(x: 33, y: 12),
-                       control1: CGPoint(x: 42, y: -2), control2: CGPoint(x: 40, y: 7))
-        skull.addCurve(to: CGPoint(x: 16, y: 29),
-                       control1: CGPoint(x: 28, y: 22), control2: CGPoint(x: 22, y: 28))
-        skull.addQuadCurve(to: CGPoint(x: -16, y: 29), control: CGPoint(x: 0, y: 35))
-        skull.addCurve(to: CGPoint(x: -33, y: 12),
-                       control1: CGPoint(x: -22, y: 28), control2: CGPoint(x: -28, y: 22))
-        skull.addCurve(to: CGPoint(x: -36, y: -12),
-                       control1: CGPoint(x: -40, y: 7), control2: CGPoint(x: -42, y: -2))
-        skull.closeSubpath()
-
-        ctx.saveGState()
-        ctx.addPath(skull)
-        ctx.clip()
-        let cs = CGColorSpaceCreateDeviceRGB()
-        let fur = [corgiWhite.cgColor, corgiCream.cgColor] as CFArray
-        if let fg = CGGradient(colorsSpace: cs, colors: fur, locations: [0.1, 1.0]) {
-            ctx.drawLinearGradient(fg,
-                                   start: CGPoint(x: 0, y: -33),
-                                   end: CGPoint(x: 0, y: 30), options: [])
-        }
-
-        // Large rounded ginger eye patches (V2): from ear base down around the eyes
-        // and onto the cheeks. Left (viewer-left) patch is noticeably bigger.
-        for sgn in [-1.0, 1.0] as [CGFloat] {
-            let patchRX: CGFloat = sgn < 0 ? 27 : 22
-            let patchRY: CGFloat = sgn < 0 ? 26 : 22
-            let p = corgiProject(x: sgn * 19, y: -9, z: 26,
-                                 yawRad: yawRad, pitchRad: pitchRad)
-            ctx.saveGState()
-            ctx.translateBy(x: p.x, y: p.y)
-            ctx.rotate(by: -sgn * 0.12)
-            ctx.scaleBy(x: max(0.72, cos(yawRad * 0.7)) * (patchRX / patchRY), y: 1.0)
-            let patchColors = [
-                corgiGinger.cgColor,
-                corgiGinger.cgColor,
-                corgiGinger.withAlphaComponent(0.0).cgColor
-            ] as CFArray
-            if let pg = CGGradient(colorsSpace: cs, colors: patchColors, locations: [0.0, 0.80, 1.0]) {
-                ctx.drawRadialGradient(pg, startCenter: .zero, startRadius: 3,
-                                       endCenter: .zero, endRadius: patchRY, options: [])
-            }
-            ctx.restoreGState()
-        }
-
-        // Signature white blaze (V2): broad across the forehead, tapering
-        // steadily down to the nose with gently wavy edges.
-        let blaze = CGMutablePath()
-        blaze.move(to: CGPoint(x: -13, y: -34))
-        blaze.addCurve(to: CGPoint(x: -5.5, y: 22),
-                       control1: CGPoint(x: -12.5, y: -8), control2: CGPoint(x: -7.5, y: 8))
-        blaze.addQuadCurve(to: CGPoint(x: 5.5, y: 22), control: CGPoint(x: 0, y: 28))
-        blaze.addCurve(to: CGPoint(x: 13, y: -34),
-                       control1: CGPoint(x: 7.5, y: 8), control2: CGPoint(x: 12.5, y: -8))
-        blaze.closeSubpath()
-        ctx.setFillColor(corgiWhite.cgColor)
-        ctx.addPath(blaze)
-        ctx.fillPath()
-        ctx.restoreGState()
-
-        ctx.saveGState()
-        ctx.setStrokeColor(corgiOutline.withAlphaComponent(0.26).cgColor)
-        ctx.setLineWidth(1.2)
-        ctx.addPath(skull)
-        ctx.strokePath()
-        ctx.restoreGState()
-
-        // V2 fluffy white cheek ruff — scalloped tufts on both sides under the eyes,
-        // giving the characteristic plush corgi "beard" silhouette.
-        ctx.saveGState()
-        for sgn in [-1.0, 1.0] as [CGFloat] {
-            let cheek = CGMutablePath()
-            let origin = corgiProject(x: sgn * 22, y: 12, z: 20,
-                                      yawRad: yawRad, pitchRad: pitchRad)
-            cheek.move(to: origin)
-            cheek.addQuadCurve(to: CGPoint(x: origin.x + sgn * 13, y: origin.y + 4),
-                               control: CGPoint(x: origin.x + sgn * 14, y: origin.y - 4))
-            cheek.addQuadCurve(to: CGPoint(x: origin.x + sgn * 10, y: origin.y + 12),
-                               control: CGPoint(x: origin.x + sgn * 17, y: origin.y + 7))
-            cheek.addQuadCurve(to: CGPoint(x: origin.x + sgn * 13, y: origin.y + 19),
-                               control: CGPoint(x: origin.x + sgn * 15, y: origin.y + 15))
-            cheek.addQuadCurve(to: CGPoint(x: origin.x + sgn * 3, y: origin.y + 22),
-                               control: CGPoint(x: origin.x + sgn * 10, y: origin.y + 23))
-            cheek.addQuadCurve(to: origin,
-                               control: CGPoint(x: origin.x - sgn * 2, y: origin.y + 14))
-            cheek.closeSubpath()
-            ctx.setFillColor(corgiWhite.cgColor)
-            ctx.addPath(cheek)
-            ctx.fillPath()
-            ctx.setStrokeColor(corgiCream.cgColor)
-            ctx.setLineWidth(1.0)
-            ctx.strokePath()
-        }
-        ctx.restoreGState()
-
-        drawCorgiEyesEx(in: ctx, physics: physics, yawRad: yawRad, pitchRad: pitchRad, eyeTheme: eyeTheme)
-        drawCorgiMuzzleEx(in: ctx, physics: physics, yawRad: yawRad, pitchRad: pitchRad)
-        drawCorgiWhiskersEx(in: ctx, yawRad: yawRad, pitchRad: pitchRad)
-
-        if physics.isStraining && physics.strainTier >= 3 {
-            drawStrainExtras(in: ctx, yawRad: yawRad, pitchRad: pitchRad,
-                             physics: physics, eyeTheme: eyeTheme)
-        }
-        ctx.restoreGState()
-    }
-
-    /// Broad triangular corgi ear: ginger shell, soft pink-cream inner, left tip flops out.
-    private static func drawCorgiEarEx(
-        in ctx: CGContext,
-        sign: CGFloat,
-        yawRad: CGFloat,
-        pitchRad: CGFloat,
-        physics: CatPhysics
-    ) {
-        let twitch = physics.earTwitch.value * 0.05
-        // V2: broad, thick triangular ears. Viewer-left tip flops outward.
-        let flop: CGFloat = sign < 0 ? -0.30 : 0.06
-        let lean = flop + twitch * sign
-        let baseIn = corgiProject(x: sign * 6, y: -27, z: 1,
-                                  yawRad: yawRad, pitchRad: pitchRad)
-        let baseOut = corgiProject(x: sign * 41, y: -14, z: -3,
-                                   yawRad: yawRad, pitchRad: pitchRad)
-        let tip = corgiProject(x: sign * 31 + sin(lean) * 22,
-                               y: -68 - cos(lean) * 4 + (sign < 0 ? 8 : 0),
-                               z: -3, yawRad: yawRad, pitchRad: pitchRad)
-
-        let ear = CGMutablePath()
-        ear.move(to: baseIn)
-        ear.addQuadCurve(to: CGPoint(x: tip.x - sign * 4.5, y: tip.y + 3),
-                         control: CGPoint(x: sign * 16, y: -54))
-        // broad rounded tip cap — corgi ears are wide triangles, not needles
-        ear.addQuadCurve(to: CGPoint(x: tip.x + sign * 6, y: tip.y + 8),
-                         control: CGPoint(x: tip.x + sign * 0.5, y: tip.y - 6))
-        ear.addQuadCurve(to: baseOut, control: CGPoint(x: sign * 46, y: -44))
-        ear.addQuadCurve(to: baseIn, control: CGPoint(x: sign * 24, y: -11))
-        ear.closeSubpath()
-
-        ctx.saveGState()
-        let cs = CGColorSpaceCreateDeviceRGB()
-        let shell = [corgiGinger.cgColor, corgiGingerDeep.cgColor] as CFArray
-        if let g = CGGradient(colorsSpace: cs, colors: shell, locations: [0.0, 1.0]) {
-            ctx.saveGState()
-            ctx.addPath(ear)
-            ctx.clip()
-            ctx.drawLinearGradient(g, start: CGPoint(x: baseOut.x, y: -12),
-                                   end: CGPoint(x: tip.x, y: tip.y), options: [])
-            ctx.restoreGState()
-        }
-        ctx.setFillColor(corgiGinger.cgColor)
-        ctx.addPath(ear)
-        ctx.fillPath()
-        ctx.setStrokeColor(corgiOutline.withAlphaComponent(0.22).cgColor)
-        ctx.setLineWidth(1.0)
-        ctx.strokePath()
-
-        let inner = CGMutablePath()
-        let innerTip = CGPoint(x: tip.x - sign * 1.5, y: tip.y + 13)
-        inner.move(to: CGPoint(x: baseIn.x + sign * 8, y: baseIn.y + 1))
-        inner.addQuadCurve(to: innerTip, control: CGPoint(x: sign * 18, y: -40))
-        inner.addQuadCurve(to: CGPoint(x: baseOut.x - sign * 10, y: baseOut.y - 7),
-                           control: CGPoint(x: innerTip.x + sign * 6, y: innerTip.y + 14))
-        inner.closeSubpath()
-        ctx.setFillColor(NSColor(calibratedRed: 0.94, green: 0.74, blue: 0.62, alpha: 0.78).cgColor)
-        ctx.addPath(inner)
-        ctx.fillPath()
-        ctx.restoreGState()
-    }
-
-    /// Small almond brown eyes, not the cat's giant glowing irises.
-    private static func drawCorgiEyesEx(
-        in ctx: CGContext,
-        physics: CatPhysics,
-        yawRad: CGFloat,
-        pitchRad: CGFloat,
-        eyeTheme: EyeColorTheme
-    ) {
-        let brown = NSColor(calibratedRed: 0.30, green: 0.18, blue: 0.10, alpha: 1.0)
-        let ink = corgiNose
-
-        for sgn in [-1.0, 1.0] as [CGFloat] {
-            let p = corgiProject(x: sgn * 19, y: -4, z: 28,
-                                 yawRad: yawRad, pitchRad: pitchRad)
-            let fore = max(0.62, min(1.05, cos(yawRad + sgn * 0.34) / cos(0.34)))
-            ctx.saveGState()
-            ctx.translateBy(x: p.x, y: p.y)
-            ctx.scaleBy(x: fore, y: 1.0)
-
-            if physics.isFried {
-                ctx.setFillColor(brown.withAlphaComponent(0.65).cgColor)
-                ctx.fillEllipse(in: CGRect(x: -8, y: -6, width: 16, height: 12))
-                let drift = sin(physics.time * 1.7 + (sgn < 0 ? 0 : 2.3)) * 1.4
-                ctx.setFillColor(ink.cgColor)
-                ctx.fillEllipse(in: CGRect(x: drift - 1.7, y: 1.3, width: 3.4, height: 3.6))
-                let lid = CGMutablePath()
-                lid.move(to: CGPoint(x: -9, y: 6))
-                lid.addLine(to: CGPoint(x: -9, y: 0.5))
-                lid.addQuadCurve(to: CGPoint(x: 9, y: 0.5), control: CGPoint(x: 0, y: -1.8))
-                lid.addLine(to: CGPoint(x: 9, y: 6))
-                lid.closeSubpath()
-                ctx.setFillColor(corgiWhite.cgColor)
-                ctx.addPath(lid)
-                ctx.fillPath()
-                ctx.restoreGState()
-                continue
-            }
-
-            if physics.isHappyClosedEyes {
-                ctx.setStrokeColor(brown.cgColor)
-                ctx.setLineWidth(2.4)
-                ctx.setLineCap(.round)
-                ctx.move(to: CGPoint(x: -8.5, y: 1))
-                ctx.addQuadCurve(to: CGPoint(x: 8.5, y: 1),
-                                 control: CGPoint(x: sgn * 1.2, y: -2.4))
-                ctx.strokePath()
-                ctx.restoreGState()
-                continue
-            }
-
-            if physics.isBlissfulSquint {
-                ctx.setFillColor(brown.cgColor)
-                ctx.fillEllipse(in: CGRect(x: -8.5, y: -0.8, width: 17, height: 3.4))
-                ctx.restoreGState()
-                continue
-            }
-
-            let hunt = max(0, min(1, physics.huntIntensity.value))
-            let tier = physics.isStraining ? physics.strainTier : 0
-            let ry: CGFloat = tier == 3 ? 3.0
-                : (tier == 2 ? 4.6 : (tier == 1 ? 6.2 : 9.2 + hunt * 1.2))
-            let rx: CGFloat = tier >= 2 ? 8.6 : (8.8 + hunt * 1.2)
-
-            // V2 eyes: large, round, gently almond — not tiny slits.
-            let almond = CGMutablePath()
-            almond.move(to: CGPoint(x: -rx, y: 0))
-            almond.addQuadCurve(to: CGPoint(x: rx, y: 0),
-                                control: CGPoint(x: 0, y: -ry * 1.35))
-            almond.addQuadCurve(to: CGPoint(x: -rx, y: 0),
-                                control: CGPoint(x: 0, y: ry * 1.30))
-            almond.closeSubpath()
-
-            ctx.setFillColor(brown.cgColor)
-            ctx.addPath(almond)
-            ctx.fillPath()
-
-            ctx.saveGState()
-            ctx.addPath(almond)
-            ctx.clip()
-            let gaze = physics.eyeGaze.point
-            let px = gaze.x * (tier >= 2 ? 1.6 : 2.8)
-            let py = gaze.y * (tier >= 2 ? 0.8 : 1.8)
-            let pupilW: CGFloat = tier >= 2 ? 3.2 : (5.0 + hunt * 1.2)
-            let pupilH: CGFloat = tier == 3 ? ry * 2.2 : (ry * 1.70 + hunt * 0.8)
-            ctx.setFillColor(ink.cgColor)
-            ctx.fillEllipse(in: CGRect(x: px - pupilW / 2, y: py - pupilH / 2,
-                                       width: pupilW, height: pupilH))
-            if hunt > 0.25 || tier == 0 {
-                // V2: bright oversized catchlight + a smaller secondary sparkle.
-                ctx.setFillColor(NSColor.white.withAlphaComponent(hunt > 0.25 ? 0.92 : 0.80).cgColor)
-                let gr: CGFloat = hunt > 0.25 ? 2.4 : 3.0
-                ctx.fillEllipse(in: CGRect(x: px - pupilW * 0.20 - gr / 2,
-                                           y: py - pupilH * 0.22 - gr / 2,
-                                           width: gr, height: gr))
-                let gr2: CGFloat = gr * 0.42
-                ctx.fillEllipse(in: CGRect(x: px + pupilW * 0.24 - gr2 / 2,
-                                           y: py + pupilH * 0.20 - gr2 / 2,
-                                           width: gr2, height: gr2))
-            }
-            let closure = physics.effectiveEyeClosure
-            if closure > 0.02 && tier == 0 {
-                ctx.setFillColor(corgiWhite.cgColor)
-                ctx.fill(CGRect(x: -rx - 2, y: -ry * 1.6,
-                                width: rx * 2 + 4, height: ry * 3.2 * closure))
-            }
-            ctx.restoreGState()
-
-            if tier > 0 {
-                ctx.setStrokeColor(brown.cgColor)
-                ctx.setLineWidth(tier == 3 ? 3.4 : 2.0)
-                ctx.setLineCap(.round)
-                let innerX = -sgn * 8.5
-                let outerX = sgn * 9.5
-                ctx.move(to: CGPoint(x: outerX, y: tier == 3 ? -8.5 : -9.5))
-                ctx.addQuadCurve(to: CGPoint(x: innerX, y: tier == 3 ? -5.5 : -7.0),
-                                 control: CGPoint(x: 0, y: tier == 3 ? -8.0 : -10.0))
-                ctx.strokePath()
-            }
-            ctx.restoreGState()
-        }
-    }
-
-    /// Long white snout with a dark brown nose — the biggest visual difference from a cat.
-    private static func drawCorgiMuzzleEx(
-        in ctx: CGContext,
-        physics: CatPhysics,
-        yawRad: CGFloat,
-        pitchRad: CGFloat
-    ) {
-        let m = corgiProject(x: 0, y: 16, z: 29, yawRad: yawRad, pitchRad: pitchRad)
-        ctx.saveGState()
-        ctx.translateBy(x: m.x, y: m.y)
-        ctx.scaleBy(x: max(0.72, cos(yawRad * 0.65)), y: 1.0)
-
-        let snout = CGMutablePath()
-        snout.move(to: CGPoint(x: -15, y: -16))
-        snout.addQuadCurve(to: CGPoint(x: 15, y: -16), control: CGPoint(x: 0, y: -20))
-        snout.addQuadCurve(to: CGPoint(x: 10.5, y: 19), control: CGPoint(x: 15, y: 5))
-        snout.addQuadCurve(to: CGPoint(x: -10.5, y: 19), control: CGPoint(x: 0, y: 25))
-        snout.addQuadCurve(to: CGPoint(x: -15, y: -16), control: CGPoint(x: -15, y: 5))
-        snout.closeSubpath()
-
-        let cs = CGColorSpaceCreateDeviceRGB()
-        let fur = [corgiWhite.cgColor, corgiCream.cgColor] as CFArray
-        if let g = CGGradient(colorsSpace: cs, colors: fur, locations: [0.0, 1.0]) {
-            ctx.saveGState()
-            ctx.addPath(snout)
-            ctx.clip()
-            ctx.drawLinearGradient(g, start: CGPoint(x: 0, y: -14),
-                                   end: CGPoint(x: 0, y: 18), options: [])
-            ctx.restoreGState()
-        }
-        ctx.setFillColor(corgiWhite.cgColor)
-        ctx.addPath(snout)
-        ctx.fillPath()
-
-        // Dark liver nose.
-        ctx.setFillColor(corgiNose.cgColor)
-        let nose = CGMutablePath()
-        nose.move(to: CGPoint(x: -8, y: 6.5))
-        nose.addQuadCurve(to: CGPoint(x: 8, y: 6.5), control: CGPoint(x: 0, y: 3.4))
-        nose.addQuadCurve(to: CGPoint(x: 0, y: 15), control: CGPoint(x: 4.8, y: 13.6))
-        nose.addQuadCurve(to: CGPoint(x: -8, y: 6.5), control: CGPoint(x: -4.8, y: 13.6))
-        nose.closeSubpath()
-        ctx.addPath(nose)
-        ctx.fillPath()
-        ctx.setFillColor(NSColor.white.withAlphaComponent(0.42).cgColor)
-        ctx.fillEllipse(in: CGRect(x: -4.2, y: 7.2, width: 3.0, height: 1.7))
-
-        if !physics.isFried && !physics.isStraining {
-            ctx.setStrokeColor(corgiOutline.cgColor)
-            ctx.setLineWidth(1.1)
-            ctx.setLineCap(.round)
-            ctx.move(to: CGPoint(x: 0, y: 15))
-            ctx.addLine(to: CGPoint(x: 0, y: 19.5))
-            ctx.move(to: CGPoint(x: 0, y: 19.5))
-            ctx.addQuadCurve(to: CGPoint(x: 5.4, y: 20.1), control: CGPoint(x: 2.8, y: 23.5))
-            ctx.move(to: CGPoint(x: 0, y: 19.5))
-            ctx.addQuadCurve(to: CGPoint(x: -5.4, y: 20.1), control: CGPoint(x: -2.8, y: 23.5))
-            ctx.strokePath()
-            if sin(physics.time * 1.3) > 0.4 {
-                ctx.setFillColor(NSColor(calibratedRed: 0.90, green: 0.40, blue: 0.46, alpha: 0.95).cgColor)
-                ctx.fillEllipse(in: CGRect(x: -2.2, y: 22.5, width: 4.4, height: 4.8))
-            }
-        } else {
-            ctx.setStrokeColor(corgiOutline.cgColor)
-            ctx.setLineWidth(1.2)
-            ctx.setLineCap(.round)
-            ctx.move(to: CGPoint(x: -4.5, y: 21.5))
-            ctx.addQuadCurve(to: CGPoint(x: 4.5, y: 21.5), control: CGPoint(x: 0, y: physics.isFried ? 20.2 : 24))
-            ctx.strokePath()
-        }
-        ctx.restoreGState()
-    }
-
-    private static func drawCorgiWhiskersEx(
-        in ctx: CGContext,
-        yawRad: CGFloat,
-        pitchRad: CGFloat
-    ) {
-        ctx.saveGState()
-        ctx.setStrokeColor(NSColor(calibratedWhite: 0.95, alpha: 0.55).cgColor)
-        ctx.setLineWidth(1.0)
-        ctx.setLineCap(.round)
-        for sgn in [-1.0, 1.0] as [CGFloat] {
-            let root = corgiProject(x: sgn * 14, y: 22, z: 27,
-                                    yawRad: yawRad, pitchRad: pitchRad)
-            for k in 0..<2 {
-                ctx.move(to: root)
-                ctx.addQuadCurve(
-                    to: CGPoint(x: root.x + sgn * (18 + CGFloat(k) * 3),
-                                y: root.y + 3 - CGFloat(k) * 6),
-                    control: CGPoint(x: root.x + sgn * 10, y: root.y - 2 - CGFloat(k) * 4)
-                )
-            }
-        }
-        ctx.strokePath()
-        ctx.restoreGState()
-    }
-
-    /// Short white stubby legs when idle; typing reaches still use the shared limb routine.
-    private static func drawCorgiPaws(
-        in ctx: CGContext,
-        seatX: CGFloat,
-        seatY: CGFloat,
-        breath: CGFloat,
-        physics: CatPhysics
-    ) {
-        let lPos = physics.leftPaw.point
-        let rPos = physics.rightPaw.point
-        let lDist = hypot(lPos.x - CatPhysics.leftPawRest.x, lPos.y - CatPhysics.leftPawRest.y)
-        let rDist = hypot(rPos.x - CatPhysics.rightPawRest.x, rPos.y - CatPhysics.rightPawRest.y)
-        let lShoulder = CGPoint(x: seatX - 26, y: seatY - 66 + breath)
-        let rShoulder = CGPoint(x: seatX + 26, y: seatY - 66 + breath)
-
-        if lDist < 6.0 && !physics.leftPawOnMouse && !physics.leftPawTyping {
-            drawCorgiIdleLeg(in: ctx, x: seatX - 24, seatY: seatY, breath: breath)
-        } else {
-            drawLimb(in: ctx, start: lShoulder,
-                     control: CGPoint(x: (lShoulder.x + lPos.x) * 0.5 - 4,
-                                      y: (lShoulder.y + lPos.y) * 0.5 - 6),
-                     end: lPos, startWidth: 16.5, endWidth: 12.5,
-                     outlineOnLeftSide: false, outlineAlpha: 0.6, coat: .corgi)
-        }
-        if rDist < 6.0 && !physics.rightPawTyping {
-            drawCorgiIdleLeg(in: ctx, x: seatX + 24, seatY: seatY, breath: breath)
-        } else {
-            drawLimb(in: ctx, start: rShoulder,
-                     control: CGPoint(x: (rShoulder.x + rPos.x) * 0.5 + 4,
-                                      y: (rShoulder.y + rPos.y) * 0.5 - 6),
-                     end: rPos, startWidth: 16.5, endWidth: 12.5,
-                     outlineOnLeftSide: true, outlineAlpha: 0.6, coat: .corgi)
-        }
-    }
-
-    private static func drawCorgiIdleLeg(in ctx: CGContext, x: CGFloat, seatY: CGFloat, breath: CGFloat) {
-        ctx.saveGState()
-        let leg = CGRect(x: x - 9.5, y: seatY - 32 + breath, width: 19, height: 44)
-        ctx.setFillColor(corgiWhite.cgColor)
-        ctx.addPath(CGPath(roundedRect: leg, cornerWidth: 8, cornerHeight: 8, transform: nil))
-        ctx.fillPath()
-        ctx.setStrokeColor(corgiCream.cgColor)
-        ctx.setLineWidth(1.1)
-        ctx.strokePath()
-        ctx.setStrokeColor(corgiOutline.withAlphaComponent(0.35).cgColor)
-        ctx.setLineWidth(1.0)
-        ctx.move(to: CGPoint(x: x - 2.5, y: seatY + 7))
-        ctx.addLine(to: CGPoint(x: x - 2.5, y: seatY + 2))
-        ctx.move(to: CGPoint(x: x + 2.5, y: seatY + 7))
-        ctx.addLine(to: CGPoint(x: x + 2.5, y: seatY + 2))
-        ctx.strokePath()
-        ctx.restoreGState()
     }
 }
