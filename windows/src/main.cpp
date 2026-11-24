@@ -12,6 +12,8 @@
 #include "InputEngine.hpp"
 #include "CatPhysics.hpp"
 #include "CatRenderer.hpp"
+#include "SoundEngine.hpp"
+#include "MusicPulse.hpp"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -49,10 +51,17 @@ enum MenuCmd : UINT {
     CMD_SCALE_100,
     CMD_SCALE_125,
     CMD_SCALE_150,
+    CMD_TOGGLE_SOUND = 1101,
+    CMD_TOGGLE_MUSIC = 1102,
+    CMD_SOUND_THEME_BASE = 1200,  // 1200..1206: 7 themes
+    CMD_VOLUME_BASE = 1300,       // 1300..1305: mute, 25%, 50%, 100%, 150%, 200%
     CMD_DEMO_BURST,
     CMD_RESET_POS,
     CMD_QUIT
 };
+
+constexpr double kVolumeSteps[] = { 0.0, 0.25, 0.5, 1.0, 1.5, 2.0 };
+constexpr int kVolumeStepCount = (int)(sizeof(kVolumeSteps) / sizeof(kVolumeSteps[0]));
 
 struct AppState {
     HWND hwnd = nullptr;
@@ -316,6 +325,56 @@ void showContextMenu(AppState& app, POINT screenPt) {
     AppendMenuW(menu, MF_POPUP, (UINT_PTR)scaleMenu, L"\u5C3A\u5BF8\u5927\u5C0F");
 
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+
+    // MARK: - Keyboard sound (KeyFoley-derived, ported from the macOS build)
+    auto& sound = KuroSoundEngine::instance();
+    AppendMenuW(menu, MF_STRING | (app.settings.soundEnabled ? MF_CHECKED : 0),
+                CMD_TOGGLE_SOUND, L"\U0001F50A \u6309\u952E\u97F3\u6548 (\u5F00/\u5173)");
+
+    HMENU soundThemeMenu = CreatePopupMenu();
+    auto themes = sound.themes();
+    if (themes.empty()) {
+        std::wstring err = sound.lastError();
+        AppendMenuW(soundThemeMenu, MF_STRING | MF_GRAYED, 0,
+                    err.empty() ? L"\u65E0\u53EF\u7528\u4E3B\u9898" : err.c_str());
+    } else {
+        std::string selectedId = app.settings.soundTheme;
+        for (size_t i = 0; i < themes.size() && i < 7; ++i) {
+            AppendMenuW(soundThemeMenu,
+                        MF_STRING | (themes[i].id == selectedId ? MF_CHECKED : 0),
+                        (UINT)(CMD_SOUND_THEME_BASE + i),
+                        themes[i].displayName.c_str());
+        }
+    }
+    AppendMenuW(menu, MF_POPUP | (app.settings.soundEnabled ? 0 : MF_GRAYED),
+                (UINT_PTR)soundThemeMenu, L"\u97F3\u6548\u4E3B\u9898");
+
+    HMENU volumeMenu = CreatePopupMenu();
+    static const wchar_t* volumeLabels[kVolumeStepCount] = {
+        L"\u9759\u97F3", L"25%", L"50%", L"100% \u6807\u51C6", L"150% \u589E\u5F3A", L"200% \u589E\u5F3A"
+    };
+    for (int i = 0; i < kVolumeStepCount; ++i) {
+        bool checked = std::fabs(app.settings.soundVolume - kVolumeSteps[i]) < 0.01;
+        AppendMenuW(volumeMenu, MF_STRING | (checked ? MF_CHECKED : 0),
+                    (UINT)(CMD_VOLUME_BASE + i), volumeLabels[i]);
+    }
+    AppendMenuW(menu, MF_POPUP | (app.settings.soundEnabled ? 0 : MF_GRAYED),
+                (UINT_PTR)volumeMenu, L"\u97F3\u6548\u97F3\u91CF");
+
+    // MARK: - Music pulse (system audio loopback + spectrum)
+    auto& music = MusicPulse::instance();
+    AppendMenuW(menu, MF_STRING | (app.settings.musicMode ? MF_CHECKED : 0),
+                CMD_TOGGLE_MUSIC, L"\U0001F3B5 \u97F3\u4E50\u5F8B\u52A8\uFF08\u6021\u8C31\u5149\u67F1 + \u97F3\u7B26\uFF09");
+    if (app.settings.musicMode) {
+        auto snap = music.snapshot();
+        std::wstring status;
+        if (!snap.error.empty()) status = L"\u26A0 " + snap.error;
+        else if (snap.playing) status = L"\u266A \u6B63\u5728\u8DDF\u968F\u97F3\u4E50\u5F8B\u52A8";
+        else status = L"\u25CB \u7B49\u5F85\u97F3\u4E50\u64AD\u653E\uFF08\u4F7F\u7528\u9ED8\u8BA4\u8F93\u51FA\u8BBE\u5907\uFF09";
+        AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, status.c_str());
+    }
+
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, CMD_DEMO_BURST, L"\u6F14\u793A\u6253\u5B57\u52A8\u753B");
     AppendMenuW(menu, MF_STRING, CMD_RESET_POS, L"\u91CD\u7F6E\u4F4D\u7F6E\u5230\u53F3\u4E0B\u89D2");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -377,6 +436,18 @@ void showContextMenu(AppState& app, POINT screenPt) {
         case CMD_EYE_BLUE:  app.settings.eyeTheme = EyeColorTheme::SiameseBlue; app.settings.saveToRegistry(); break;
         case CMD_EYE_AMBER: app.settings.eyeTheme = EyeColorTheme::WarmAmber; app.settings.saveToRegistry(); break;
         case CMD_EYE_CYAN:  app.settings.eyeTheme = EyeColorTheme::IceCyan; app.settings.saveToRegistry(); break;
+        case CMD_TOGGLE_SOUND: {
+            app.settings.soundEnabled = !app.settings.soundEnabled;
+            KuroSoundEngine::instance().setEnabled(app.settings.soundEnabled);
+            app.settings.saveToRegistry();
+            break;
+        }
+        case CMD_TOGGLE_MUSIC: {
+            app.settings.musicMode = !app.settings.musicMode;
+            MusicPulse::instance().setEnabled(app.settings.musicMode);
+            app.settings.saveToRegistry();
+            break;
+        }
         case CMD_SCALE_65:  app.settings.scale = 0.65f; applyWindowScaleAndPosition(app, true); break;
         case CMD_SCALE_85:  app.settings.scale = 0.85f; applyWindowScaleAndPosition(app, true); break;
         case CMD_SCALE_100: app.settings.scale = 1.00f; applyWindowScaleAndPosition(app, true); break;
@@ -395,8 +466,22 @@ void showContextMenu(AppState& app, POINT screenPt) {
         case CMD_QUIT:
             PostQuitMessage(0);
             break;
-        default:
+        default: {
+            if (cmd >= CMD_SOUND_THEME_BASE && cmd < CMD_SOUND_THEME_BASE + 7) {
+                auto themes = KuroSoundEngine::instance().themes();
+                size_t idx = (size_t)(cmd - CMD_SOUND_THEME_BASE);
+                if (idx < themes.size()) {
+                    app.settings.soundTheme = themes[idx].id;
+                    KuroSoundEngine::instance().setTheme(themes[idx].id);
+                    app.settings.saveToRegistry();
+                }
+            } else if (cmd >= CMD_VOLUME_BASE && cmd < CMD_VOLUME_BASE + kVolumeStepCount) {
+                app.settings.soundVolume = kVolumeSteps[cmd - CMD_VOLUME_BASE];
+                KuroSoundEngine::instance().setVolume(app.settings.soundVolume);
+                app.settings.saveToRegistry();
+            }
             break;
+        }
     }
 }
 
@@ -408,6 +493,9 @@ void tickAndRender(AppState& app) {
     app.lastTickTime = now;
     if (dt <= 0.0f || dt > 0.2f) dt = 1.0f / 60.0f;
 
+    // Poll the analyser before physics/renderer consume its smoothed state.
+    MusicPulse::instance().poll();
+
     // Optional menu demo typing burst
     if (app.demoActive) {
         static const PhysicalKey demoKeys[] = {
@@ -417,7 +505,11 @@ void tickAndRender(AppState& app) {
         };
         int targetIdx = (int)((now - app.demoStartTime) / 0.13);
         while (app.demoStepIdx <= targetIdx && app.demoStepIdx < 10) {
-            app.physics.triggerKeyDown(demoKeys[app.demoStepIdx], app.settings);
+            PhysicalKey key = demoKeys[app.demoStepIdx];
+            app.physics.triggerKeyDown(key, app.settings);
+            auto& sound = KuroSoundEngine::instance();
+            sound.play(soundCategoryFor(key));
+            if (app.settings.musicMode) MusicPulse::instance().suppressOwnSound();
             app.demoStepIdx++;
         }
         if (app.demoStepIdx >= 10) app.demoActive = false;
@@ -630,6 +722,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
 
     g_msgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
+    // WASAPI (keyboard sounds + music loopback) needs COM on this thread.
+    HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
     Gdiplus::GdiplusStartupInput gdipInput;
     ULONG_PTR gdipToken = 0;
     Gdiplus::GdiplusStartup(&gdipToken, &gdipInput, nullptr);
@@ -638,12 +733,28 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
     g_app = &app;
     app.settings.loadFromRegistry();
 
+    // Resolve the executable directory once; sound themes live next to the exe.
+    wchar_t exePath[MAX_PATH * 2] = {};
+    DWORD exeLen = GetModuleFileNameW(nullptr, exePath, (DWORD)(MAX_PATH * 2 - 1));
+    std::wstring exeDir = exeLen > 0 ? exePath : L".";
+    size_t slash = exeDir.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) exeDir.resize(slash);
+
+    KuroSoundEngine::instance().initialize(exeDir, app.settings.soundEnabled,
+                                           app.settings.soundTheme, app.settings.soundVolume);
+    if (app.settings.musicMode) MusicPulse::instance().setEnabled(true);
+
     // Refresh auto-start exe path if user enabled auto-start and moved KuroCat.exe
     if (isAutoStartEnabled()) {
         setAutoStartEnabled(true);
     }
 
-    app.input.onKeyDown = [&](PhysicalKey k) { app.physics.triggerKeyDown(k, app.settings); };
+    app.input.onKeyDown = [&](PhysicalKey k) {
+        app.physics.triggerKeyDown(k, app.settings);
+        auto& sound = KuroSoundEngine::instance();
+        sound.play(soundCategoryFor(k));
+        if (app.settings.musicMode) MusicPulse::instance().suppressOwnSound();
+    };
     app.input.onMouseClick = [&](int btn, bool down) { app.physics.triggerMouseClick(btn, down); };
 
     WNDCLASSEXW wc = {};
@@ -693,7 +804,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
     );
     if (!app.hwnd) {
         if (app.menuOwnerHwnd) DestroyWindow(app.menuOwnerHwnd);
+        MusicPulse::instance().setEnabled(false);
+        KuroSoundEngine::instance().shutdown();
         Gdiplus::GdiplusShutdown(gdipToken);
+        if (SUCCEEDED(comHr)) CoUninitialize();
         if (hMutex) CloseHandle(hMutex);
         return 1;
     }
@@ -718,7 +832,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int) {
         DispatchMessageW(&msg);
     }
 
+    MusicPulse::instance().setEnabled(false);
+    KuroSoundEngine::instance().shutdown();
     Gdiplus::GdiplusShutdown(gdipToken);
+    if (SUCCEEDED(comHr)) CoUninitialize();
     if (hMutex) CloseHandle(hMutex);
     return 0;
 }

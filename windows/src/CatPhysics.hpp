@@ -6,8 +6,10 @@
 #include <unordered_map>
 #include <random>
 #include <algorithm>
+#include <string>
 #include "KeyMap.hpp"
 #include "InputEngine.hpp"
+#include "MusicPulse.hpp"
 
 enum class CatCoatTheme : int {
     ClassicBlack = 0,
@@ -40,6 +42,12 @@ struct CatSettings {
     int posX = -99999;
     int posY = -99999;
 
+    // Features added by KuroCat-with-Sound (mirrored from the macOS build).
+    bool soundEnabled = true;
+    std::string soundTheme = "scissor";
+    double soundVolume = 1.0;   // 0...4
+    bool musicMode = false;
+
     void loadFromRegistry() {
         HKEY hKey = nullptr;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\KuroCat", 0, KEY_READ, &hKey) != ERROR_SUCCESS) return;
@@ -57,6 +65,21 @@ struct CatSettings {
         coatTheme        = (CatCoatTheme)std::clamp((int)readDword(L"CoatTheme", 0), 0, 1);
         keyboardTheme    = (KeyboardTheme)std::clamp((int)readDword(L"KeyboardTheme", 0), 0, 2);
         eyeTheme         = (EyeColorTheme)std::clamp((int)readDword(L"EyeTheme", 0), 0, 3);
+
+        auto readString = [&](const char* name, const std::string& def) -> std::string {
+            char buf[256] = {};
+            DWORD size = sizeof(buf) - 1;
+            if (RegQueryValueExA(hKey, name, nullptr, nullptr, (LPBYTE)buf, &size) == ERROR_SUCCESS) {
+                buf[size < sizeof(buf) - 1 ? size : sizeof(buf) - 1] = '\0';
+                return std::string(buf);
+            }
+            return def;
+        };
+        soundEnabled     = readDword(L"SoundEnabled", 1) != 0;
+        soundTheme       = readString("SoundTheme", "scissor");
+        soundVolume      = std::clamp((double)readDword(L"SoundVolumePermille", 1000) / 1000.0, 0.0, 4.0);
+        musicMode        = readDword(L"MusicMode", 0) != 0;
+
         DWORD hasPos     = readDword(L"HasPos", 0);
         if (hasPos) {
             posX = (int)readDword(L"PosX", 0);
@@ -80,6 +103,10 @@ struct CatSettings {
         writeDword(L"CoatTheme", (DWORD)coatTheme);
         writeDword(L"KeyboardTheme", (DWORD)keyboardTheme);
         writeDword(L"EyeTheme", (DWORD)eyeTheme);
+        writeDword(L"SoundEnabled", soundEnabled ? 1 : 0);
+        RegSetValueExA(hKey, "SoundTheme", 0, REG_SZ, (const BYTE*)soundTheme.c_str(), (DWORD)(soundTheme.size() + 1));
+        writeDword(L"SoundVolumePermille", (DWORD)std::clamp(soundVolume * 1000.0 + 0.5, 0.0, 4000.0));
+        writeDword(L"MusicMode", musicMode ? 1 : 0);
         if (posX != -99999 && posY != -99999) {
             writeDword(L"HasPos", 1);
             writeDword(L"PosX", (DWORD)posX);
@@ -134,6 +161,27 @@ struct PurrSparkle {
     bool isSleepZ = false;
 };
 
+/// Music-note particle floating up with the beat (matches Swift MusicNoteParticle).
+struct MusicNoteParticle {
+    Pt position;
+    Pt velocity;
+    float age = 0.0f;
+    float lifetime = 1.5f;
+    int glyph = 0;
+    float rotation = 0.0f;
+    float scale = 1.0f;
+};
+
+/// Manga-style steam wisp emitted while the cat is "fried" from fast typing.
+struct SmokePuff {
+    Pt position;
+    Pt velocity;
+    float age = 0.0f;
+    float lifetime = 1.3f;
+    float radius = 8.0f;
+    float seed = 0.0f;
+};
+
 class CatPhysics {
 public:
     static constexpr float CanvasWidth  = 360.0f;
@@ -174,6 +222,27 @@ public:
     std::vector<FloatingKeycap> floatingKeycaps;
     std::vector<PurrSparkle> sparkles;
 
+    // Music-mode overlay state (copied from MusicPulse once per physics step).
+    struct PulseState {
+        double level = 0.0;
+        double bass = 0.0;
+        double beat = 0.0;
+        bool playing = false;
+        float bands[MusicPulse::BandCount] = {};
+        float peaks[MusicPulse::BandCount] = {};
+    } pulse;
+
+    float equalizerPresence = 0.0f;   // fade-in of the spectrum capsules
+    float musicBounce = 0.0f;         // bass/beat head bob
+    float musicBlinkBoost = 0.0f;     // happy squint on beats
+    std::vector<MusicNoteParticle> musicNotes;
+
+    // Typing overload easter egg.
+    float strain = 0.0f;
+    bool isFried = false;
+    float friedTimeLeft = 0.0f;
+    std::vector<SmokePuff> smokePuffs;
+
     float time = 0.0f;
     float tailPhase = 0.0f;
 
@@ -185,16 +254,33 @@ public:
     float effectiveEyeClosure() const {
         float petClose = std::max(petHeadIntensity, petBodyIntensity * 0.62f);
         float sleepClose = sleepiness * 0.92f;
-        return std::min(1.0f, std::max(blinkProgress_, std::max(petClose, sleepClose)));
+        float musicClose = musicBlinkBoost * 0.52f;
+        return std::min(1.0f, std::max(blinkProgress_, std::max(petClose, std::max(sleepClose, musicClose))));
     }
 
     bool isHappyClosedEyes() const { return petHeadIntensity > 0.45f; }
     bool isBlissfulSquint() const { return petBodyIntensity > 0.35f && !isHappyClosedEyes(); }
+    bool isStraining() const { return strain > 0.42f && !isFried && !isHappyClosedEyes(); }
+    int strainTier() const {
+        if (!isStraining()) return 0;
+        if (strain < 0.64f) return 1;
+        if (strain < 0.85f) return 2;
+        return 3;
+    }
+    bool isDazed() const { return isFried; }
 
     void triggerKeyDown(PhysicalKey key, const CatSettings& settings) {
         double now = nowSeconds();
         PhysicalKey vk = visualKeyOf(key);
         keyGlow[vk] = 1.0f;
+
+        // Any fresh keystroke snaps the cat out of the dazed state.
+        if (isFried) endFried(now);
+
+        keyTimes_.push_back(now);
+        if (keyTimes_.size() > 64) {
+            keyTimes_.erase(keyTimes_.begin(), keyTimes_.end() - 64);
+        }
 
         Pt pt = KeyboardLayout::canvasPointForKey(vk);
         hasLastTypedPoint_ = true;
@@ -272,6 +358,58 @@ public:
         double now = nowSeconds();
         const auto& activeKeys = engine.activeKeys;
         const auto& orderedKeys = engine.pressedOrder;
+
+        // Snapshot the analyser once per frame; renderer reads this same state.
+        {
+            auto s = MusicPulse::instance().snapshot();
+            pulse.level = s.level;
+            pulse.bass = s.bass;
+            pulse.beat = s.beat;
+            pulse.playing = s.playing;
+            for (int i = 0; i < MusicPulse::BandCount; ++i) {
+                pulse.bands[i] = s.bands[i];
+                pulse.peaks[i] = s.peaks[i];
+            }
+        }
+
+        // 2a. Fast-typing overload state machine.
+        // 1.8s window + sustained-fast gate: casual typing never reaches the
+        // straining face; only a real >8 keys/s burst held ~0.85s builds strain.
+        keyTimes_.erase(std::remove_if(keyTimes_.begin(), keyTimes_.end(),
+                                       [now](double t) { return now - t > 1.8; }), keyTimes_.end());
+        double rate = (double)keyTimes_.size() / 1.8;
+        bool activelyTyping = engine.lastKeyActivityTime > 0.0 && (now - engine.lastKeyActivityTime) < 0.35;
+        bool fastEnough = activelyTyping && rate >= 8.0;
+        if (fastEnough) {
+            if (fastStreakStart_ == 0.0) fastStreakStart_ = now;
+        } else {
+            fastStreakStart_ = 0.0;
+        }
+        bool sustainedFast = fastEnough && (now - fastStreakStart_) >= 0.85;
+        double normalized = std::clamp((rate - 7.0) / 5.0, 0.0, 1.0);
+        float strainTarget = sustainedFast ? (float)std::pow(normalized, 1.4) : 0.0f;
+        float strainRate = strainTarget > strain ? 5.5f : 3.2f;
+        strain += (strainTarget - strain) * std::min(1.0f, dt * strainRate);
+
+        bool fastTyping = sustainedFast && rate >= 10.0 && (now - engine.lastKeyActivityTime) < 0.12;
+        if (fastTyping) {
+            lastFastKeyTime_ = now;
+            overloadArmed_ = true;
+        }
+        if (isFried) {
+            friedTimeLeft -= dt;
+            float moveSpeed = std::hypot(engine.mouseVelocity.x, engine.mouseVelocity.y);
+            if (friedTimeLeft <= 0.0f || (moveSpeed > 55.0f && now - engine.lastMouseMoveTime < 0.25)) {
+                endFried(now);
+            }
+        } else {
+            double noKeyFor = engine.lastKeyActivityTime > 0.0 ? (now - engine.lastKeyActivityTime) : 1e9;
+            double sinceFast = lastFastKeyTime_ > 0.0 ? (now - lastFastKeyTime_) : 1e9;
+            if (overloadArmed_ && noKeyFor > 0.16 && sinceFast > 0.12 && sinceFast < 0.85) {
+                startFried(now);
+            }
+            if (sinceFast > 2.5) overloadArmed_ = false;
+        }
 
         // 1. Petting decay & sparkles
         if (now - lastPetTime_ > 0.28) {
@@ -372,6 +510,12 @@ public:
             rightKey = recentRightKey_;
         }
 
+        // Music groove affects only head/ears/tail — paws keep their normal
+        // typing and mouse behaviour (matches the macOS implementation).
+        bool musicGrooveActive = settings.musicMode && pulse.playing &&
+            leftKey == PhysicalKey::None && rightKey == PhysicalKey::None &&
+            !mouseRecent && sleepiness < 0.3f;
+
         // Subtle mini-mouse movement
         mouseOffset.setTarget({
             std::clamp(engine.mouseVelocity.x * 0.0045f, -5.5f, 5.5f),
@@ -438,6 +582,22 @@ public:
         earFold.target = std::max(petHeadIntensity * 0.7f, petBodyIntensity * 0.45f) + sleepiness * 0.25f - hunt * 0.18f;
         earTwitch.target = 0.0f;
 
+        // Overload posture: tense crouch while straining, drooping deflation when fried.
+        if (isStraining()) {
+            earTwitch.target = std::sin((float)now * 26.0f) * strain * 1.5f;
+            headOffsetY.target += strain * 2.0f;
+        }
+        if (isFried) {
+            float droop = std::min(1.0f, (3.0f - friedTimeLeft) * 2.5f);
+            headOffsetY.target += 7.0f * droop;
+            earFold.target = std::max(earFold.target, 0.75f * droop);
+            bodySquash.target = 1.0f - 0.07f * droop;
+        }
+        if (musicGrooveActive) {
+            earTwitch.target = std::sin((float)now * 3.2f) * (0.6f + (float)pulse.level * 2.2f)
+                             + (float)pulse.beat * 3.0f;
+        }
+
         bodyShiftX.step(dt, 140.0f, 18.0f);
         bodyTilt.step(dt, 140.0f, 18.0f);
         bodySquash.step(dt, 280.0f, 18.0f);
@@ -479,6 +639,14 @@ public:
             headYaw.target = std::clamp(lookX, -1.0f, 1.0f);
             headPitch.target = std::clamp(lookY, -1.0f, 1.0f);
         }
+        if (musicGrooveActive) {
+            headPitch.target += (float)pulse.beat * 0.16f + (float)pulse.level * 0.04f;
+        }
+        if (isFried) {
+            float droop = std::min(1.0f, (3.0f - friedTimeLeft) * 2.5f);
+            headPitch.target = 0.32f * droop;
+            headYaw.target *= (1.0f - 0.6f * droop);
+        }
         float headStiff = 88.0f + hunt * 75.0f;
         float headDamp  = 14.5f + hunt * 4.5f;
         headYaw.step(dt, headStiff, headDamp);
@@ -486,6 +654,10 @@ public:
 
         if (now - lastPetTime_ > 0.28) {
             headTilt.target = bodyTilt.target * 0.45f + headYaw.value * (0.11f + hunt * 0.05f) - headYaw.value * headPitch.value * 0.04f;
+        }
+        if (musicGrooveActive) {
+            headTilt.target += std::sin((float)now * 1.9f) * (float)pulse.level * 0.16f
+                             + (float)pulse.beat * 0.12f;
         }
         headTilt.step(dt, 130.0f, 16.0f);
 
@@ -518,7 +690,9 @@ public:
         // 7. Tail wag speed
         float kpmBoost = std::min(2.4f, (float)engine.currentKPM() / 160.0f);
         float petBoost = std::max(petHeadIntensity, petBodyIntensity) * 1.4f;
-        float tailSpeed = 1.85f + kpmBoost + petBoost + hunt * 2.8f - sleepiness * 1.1f;
+        float musicBoost = (settings.musicMode && pulse.playing)
+            ? (float)pulse.level * 2.2f + (float)pulse.beat * 1.5f : 0.0f;
+        float tailSpeed = 1.85f + kpmBoost + petBoost + hunt * 2.8f + musicBoost - sleepiness * 1.1f;
         tailPhase += dt * tailSpeed;
 
         // 8. Keycap glow decay
@@ -555,6 +729,51 @@ public:
             sp.position.y += sp.velocity.y * dt;
             if (sp.age >= sp.lifetime) sparkles.erase(sparkles.begin() + i);
         }
+
+        // 10b. Overload smoke wisps — keep emitting while fried, then drift away.
+        if (isFried) {
+            smokeCooldown_ -= dt;
+            if (smokeCooldown_ <= 0.0f) {
+                smokeCooldown_ = 0.14f;
+                spawnSmoke(SeatAnchor.x + bodyShiftX.value);
+            }
+        }
+        for (int i = (int)smokePuffs.size() - 1; i >= 0; --i) {
+            auto& puff = smokePuffs[i];
+            puff.age += dt;
+            puff.position.x += puff.velocity.x * dt
+                + std::sin(puff.age * 2.6f + puff.seed) * 7.0f * dt;
+            puff.position.y += puff.velocity.y * dt;
+            if (puff.age >= puff.lifetime) smokePuffs.erase(smokePuffs.begin() + i);
+        }
+
+        // 11. Music overlay: spectrum presence, head bob, beat squint and notes.
+        const bool musicActive = settings.musicMode && pulse.playing && !isFried;
+        float presenceTarget = musicActive ? 1.0f : 0.0f;
+        equalizerPresence += (presenceTarget - equalizerPresence) * std::min(1.0f, dt * 5.0f);
+        if (musicActive) {
+            float bobTarget = (float)pulse.bass * 8.0f + (float)pulse.beat * 11.0f;
+            musicBounce += (bobTarget - musicBounce) * std::min(1.0f, dt * 18.0f);
+            musicBounce *= (1.0f - dt * 2.2f);
+            if (pulse.beat > 0.4) musicBlinkBoost = 0.95f;
+            musicBlinkBoost = std::max(0.0f, musicBlinkBoost - dt * 2.2f);
+            if ((pulse.beat > 0.4 && now - lastNoteTime_ > 0.16)
+                || (pulse.level > 0.18 && now - lastNoteTime_ > 0.34)) {
+                spawnMusicNote(now);
+                lastNoteTime_ = now;
+            }
+        } else {
+            musicBounce *= (1.0f - dt * 6.0f);
+            musicBlinkBoost = std::max(0.0f, musicBlinkBoost - dt * 3.0f);
+        }
+        for (int i = (int)musicNotes.size() - 1; i >= 0; --i) {
+            auto& note = musicNotes[i];
+            note.age += dt;
+            note.position.x += note.velocity.x * dt;
+            note.position.y += note.velocity.y * dt;
+            note.velocity.y -= 7.0f * dt;
+            if (note.age >= note.lifetime) musicNotes.erase(musicNotes.begin() + i);
+        }
     }
 
 private:
@@ -578,6 +797,75 @@ private:
 
     int badgeCascade_ = 0;
     double lastBadgeTime_ = 0.0;
+
+    // Overload state
+    std::vector<double> keyTimes_;
+    double fastStreakStart_ = 0.0;
+    double lastFastKeyTime_ = 0.0;
+    bool overloadArmed_ = false;
+    float smokeCooldown_ = 0.0f;
+
+    // Music overlay particle timing
+    double lastNoteTime_ = 0.0;
+    int noteGlyphIndex_ = 0;
+
+    void startFried(double now) {
+        isFried = true;
+        friedTimeLeft = 3.0f;
+        strain = 0.0f;
+        smokeCooldown_ = 0.0f;
+        keyTimes_.clear();
+        fastStreakStart_ = 0.0;
+        lastFastKeyTime_ = 0.0;
+        overloadArmed_ = false;
+        for (int i = 0; i < 3; ++i) spawnSmoke(SeatAnchor.x + bodyShiftX.value, true);
+        musicNotes.clear();
+        (void)now;
+    }
+
+    void endFried(double /*now*/) {
+        isFried = false;
+        friedTimeLeft = 0.0f;
+        lastFastKeyTime_ = 0.0;
+        overloadArmed_ = false;
+        keyTimes_.clear();
+        fastStreakStart_ = 0.0;
+        strain = 0.0f;
+        smokeCooldown_ = 0.0f;
+    }
+
+    void spawnSmoke(float seatX, bool strong = false) {
+        float spread = strong ? 20.0f : 16.0f;
+        smokePuffs.push_back({
+            { seatX + randRange(-spread, spread), 92.0f + randRange(-8.0f, 6.0f) },
+            { randRange(-7.0f, 7.0f), -(strong ? randRange(30.0f, 46.0f) : randRange(22.0f, 38.0f)) },
+            randRange(0.18f, 0.5f),
+            randRange(1.0f, 1.7f),
+            randRange(6.0f, 11.0f),
+            randRange(0.0f, 6.28f)
+        });
+        if (smokePuffs.size() > 26) {
+            smokePuffs.erase(smokePuffs.begin(), smokePuffs.end() - 26);
+        }
+    }
+
+    void spawnMusicNote(double /*now*/) {
+        float headX = SeatAnchor.x + bodyShiftX.value;
+        noteGlyphIndex_ = (noteGlyphIndex_ + 1) % 4;
+        musicNotes.push_back({
+            { headX + randRange(-54.0f, 54.0f), 102.0f + randRange(-12.0f, 12.0f) },
+            { randRange(-16.0f, 16.0f),
+              -44.0f - (float)pulse.level * 26.0f - randRange(0.0f, 18.0f) },
+            0.0f,
+            randRange(1.2f, 1.8f),
+            noteGlyphIndex_,
+            randRange(-0.28f, 0.28f),
+            randRange(1.0f, 1.5f) * (1.0f + (float)pulse.beat * 0.25f)
+        });
+        if (musicNotes.size() > 20) {
+            musicNotes.erase(musicNotes.begin(), musicNotes.end() - 20);
+        }
+    }
 
     static float randRange(float a, float b) {
         static thread_local std::mt19937 rng{ std::random_device{}() };

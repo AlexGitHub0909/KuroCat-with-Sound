@@ -242,6 +242,7 @@ final class CatPhysics {
     // Strain builds from a short rolling keystroke window; when it peaks and typing stops,
     // the cat "short-circuits": dazed spiraled eyes + smoke for 3s, until a key or mouse move.
     private var keyTimes: [CFTimeInterval] = []
+    private var fastStreakStart: CFTimeInterval = 0 // when the current fast burst began
     private var lastFastKeyTime: CFTimeInterval = 0
     private var overloadArmed = false               // a genuine fast-typing burst happened
     private(set) var strain: CGFloat = 0            // 0..1 effort/straining face while typing fast
@@ -460,16 +461,26 @@ final class CatPhysics {
         let curLastKeyTime = scripted?.lastKeyActivityTime ?? engine.lastKeyActivityTime
 
         // 2a. Fast-typing overload state machine.
-        // Short 1.15s rolling window gives a responsive keys/sec reading (currentKPM's 10s is far too slow).
-        keyTimes.removeAll { now - $0 > 1.15 }
-        let rate = CGFloat(keyTimes.count) / 1.15
-        let strainTarget = max(0, min(1, (rate - 4.6) / 4.2))
-        let strainRate: CGFloat = strainTarget > strain ? 9.0 : 3.2
+        // A 1.8s window plus a sustained-fast requirement keeps casual typing from
+        // looking like a furious burst. Strain grows only after ~0.85s of >8 keys/s,
+        // and scales steeply with speed so ordinary chatter stays neutral.
+        keyTimes.removeAll { now - $0 > 1.8 }
+        let rate = CGFloat(keyTimes.count) / 1.8
+        let activelyTyping = curLastKeyTime > 0 && (now - curLastKeyTime) < 0.35
+        let fastEnough = activelyTyping && rate >= 8.0
+        if fastEnough {
+            if fastStreakStart == 0 { fastStreakStart = now }
+        } else {
+            fastStreakStart = 0
+        }
+        let sustainedFast = fastEnough && (now - fastStreakStart) >= 0.85
+        let normalized = max(0, min(1, (rate - 7.0) / 5.0))
+        let strainTarget = sustainedFast ? pow(normalized, 1.4) : 0
+        let strainRate: CGFloat = strainTarget > strain ? 5.5 : 3.2
         strain += (strainTarget - strain) * min(1, dt * strainRate)
 
-        // "Fast" once arms the overload; strain may decay as the burst ends, so the
-        // trigger keys off the armed flag + a real pause, not off a decaying strain value.
-        let fastTyping = rate >= 7.6
+        // Only a genuinely sustained burst arms the fried/overload trigger.
+        let fastTyping = sustainedFast && rate >= 10.0 && (now - curLastKeyTime) < 0.12
         if fastTyping {
             lastFastKeyTime = now
             overloadArmed = true
@@ -956,6 +967,7 @@ final class CatPhysics {
         strain = 0
         smokeCooldown = 0
         keyTimes.removeAll()
+        fastStreakStart = 0
         lastFastKeyTime = 0
         overloadArmed = false
 
@@ -976,6 +988,7 @@ final class CatPhysics {
         lastFastKeyTime = 0
         overloadArmed = false
         keyTimes.removeAll()
+        fastStreakStart = 0
         strain = 0
         smokeCooldown = 0
     }

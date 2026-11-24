@@ -42,7 +42,7 @@
 - 通过菜单栏「🎵 音乐律动（拾音器 + 音符）」开关（效果见上方预览图）
 
 ### 打字过载表情（Overload Easter Egg）
-- **三档递进的用力表情**：打字越快，猫咪越"较劲"——
+- **三档递进的用力表情**：需持续高速输入（约 10 键/秒以上并保持约 1 秒）才会触发，日常聊天不会误触发；打字越快，猫咪越"较劲"——
   - 第 1 档「稍微较劲」：半睁眼、轻皱眉、抿嘴
   - 第 2 档「很努力」：眯眼竖瞳、八字眉、咬紧牙关
   - 第 3 档「拼了」：细缝眼、粗眉压低、龇牙，头上冒出怒气青筋（💢）与汗滴
@@ -56,37 +56,44 @@ KuroCat 原有的功能全部保留：黑猫/暹罗猫皮肤、打字键帽跳�
 
 | 平台 | 状态 |
 |------|------|
-| **macOS** | ✅ 当前版本仅支持 macOS |
-| Windows | 🚧 计划中，尚未实现 |
-| Linux | 🚧 暂无计划 |
+| **macOS** | ✅ 原生 Swift 版本（universal：Apple Silicon + Intel） |
+| **Windows** | ✅ 原生 C++17 / Win32 版本，功能对齐（WASAPI 音频 + Raw Input） |
+| Linux | 🚧 保留原版基础桌宠端口，未同步本项目的音效/律动功能 |
 
-**为什么目前只有 macOS？** 本项目新增的三块能力都依赖 Apple 专属技术：
+Windows 端不是模拟器或 Web 包装，而是仓库内 `windows/` 下的原生 C++ 实现，使用同一套 WAV 音效主题与 6 段频谱参数：
 
-- 音乐律动使用 **Core Audio Process Tap**（macOS 14.2+ 独占 API）
-- 按键音效使用 **AVAudioEngine / AVFAudio**
-- 全局键鼠监听使用 **CGEventTap + IOHIDManager**，权限基于 macOS TCC
-
-渲染层（Core Graphics 矢量绘制）理论上可以移植，但音频捕获、音效播放和按键监听这三块在 Windows 上需要分别改用 WASAPI loopback、DirectSound/XAudio2 和 Windows Hook 重写，不是改个编译目标就能跑的。Windows 端已列入后续计划。
+- 按键音效：**WASAPI 渲染客户端**混合 12 声道的 16-bit PCM 样本，含软限幅与 0～200% 音量
+- 音乐律动：默认播放设备的 **WASAPI Loopback** 采集 + 与 macOS 完全相同的级联滤波器/节拍检测
+- 全局键鼠：**Raw Input (RIDEV_INPUTSINK)**，无需管理员权限，游戏/全屏下同样可用
+- 渲染：GDI+ 矢量绘制，覆盖过载表情、冒烟、频谱光柱与浮动音符
 
 ### 系统版本要求
 
 - **macOS 13.0+**：键盘音效、打字动画等全部基础功能
 - **macOS 14.2+**：音乐律动模式（Core Audio Tap 的最低要求）
+- **Windows 10 / 11**：全部功能（WASAPI Loopback 与 Raw Input）
 
-本项目编译为 Apple Silicon + Intel 通用二进制（universal）。
+Windows 音乐律动监听的是**默认输出设备**的混合音频；若音乐播放器切换到别的输出设备，则不会计入律动。应用点击音效会被自动做 180ms 的窗口屏蔽，避免自我喂入导致光柱乱跳。音频同样只在内存中分析，不录音、不上传。
 
 ## 📦 下载与安装
 
-从 [Releases](../../releases) 下载 `KuroCat-macOS-universal.zip`（若尚未提供，可按下方源码编译），解压后将 `KuroCat.app` 拖入「应用程序」。
+| 平台 | 直接下载 | 说明 |
+|------|----------|------|
+| Windows 10 / 11 | **[KuroCat-Windows-x64.zip](windows/dist/KuroCat-Windows-x64.zip)** | 仓库内已附带预编译包；解压后双击 `KuroCat.exe` 即可，无需安装或管理员权限 |
+| macOS 13+ | [Releases](https://github.com/AlexGitHub0909/KuroCat-with-Sound/releases) 中的 `KuroCat-macOS-universal.zip`（若尚未提供请源码编译） | 解压后将 `KuroCat.app` 拖入「应用程序」 |
 
-### 首次授权
+Windows 解压后请保持 `KuroCat.exe` 与 `SoundThemes` 目录在一起；包内已包含全部 7 套音效样本和第三方许可声明。
+
+### macOS 首次授权
 
 1. **输入监控**（打字动画 + 音效必需）：系统设置 → 隐私与安全性 → 输入监控 → 开启 KuroCat。第一次打开时会提示，授权后从菜单栏点击「重启 KuroCat」刷新。
 2. **仅录制系统音频**（音乐律动必需）：打开音乐律动模式时，系统会弹出「系统音频录制」权限请求，请允许。音频**只在内存中实时分析，不会录音、保存或上传**。
 
 > 音乐律动使用 Core Audio Tap 而不是屏幕录制，因此**不需要屏幕录制权限**，也不会出现录屏标志。macOS 可能会在控制中心显示一个系统音频使用提示，这是系统行为，无法从应用侧关闭。
 
-### 从源码编译
+Windows 版使用 Raw Input 与 WASAPI Loopback，**无需任何系统授权弹窗**；直接运行即可打字发声、开启律动。
+
+### macOS 从源码编译
 
 ```bash
 chmod +x build.sh
@@ -96,6 +103,24 @@ open KuroCat.app
 
 编译需要 Swift 编译器与 macOS 13+ SDK，无需完整 Xcode。
 
+### Windows 从源码编译
+
+在 Windows 上进入 `windows/` 目录，任选一种方式：
+
+```bat
+cd windows
+build.bat
+```
+
+`build.bat` 会优先使用 MSVC（请在 “x64 Native Tools Command Prompt for VS” 中运行），否则使用 PATH 中的 MinGW-w64 g++，并把 `Resources/SoundThemes` 的 7 套音效样本复制到 `KuroCat.exe` 同级目录。也可以使用 CMake：
+
+```bat
+cmake -S windows -B windows/build
+cmake --build windows/build --config Release
+```
+
+运行 `KuroCat.exe` 后，右键托盘图标即可看到「🔊 按键音效」「音效主题」「音效音量」「🎵 音乐律动」等菜单，设置保存在注册表 `HKCU\Software\KuroCat`。
+
 ## ⚠️ 关于 ad-hoc 签名与权限
 
 本项目使用 ad-hoc 签名（无 Apple 开发者证书）。**每次重新编译都会改变代码签名，导致 macOS 已授予的「输入监控」权限失效**。遇到编译安装后按键无反应、动画音效消失的情况，请到 系统设置 → 隐私与安全性 → 输入监控，将 KuroCat 的开关关闭后再打开，并重启应用即可恢复。
@@ -104,8 +129,9 @@ open KuroCat.app
 
 ## 🔊 实现来源
 
-- **音效引擎**（AVAudioEngine 播放、峰值限制、按键分类）移植自 KeyFoley 的 `Sources/KeyFoley/Sound/` 模块，并针对 KuroCat 的 `PhysicalKey` 做了适配；音效样本为 KeyFoley 内置的那 7 套主题。
-- **音乐律动**为本项目新增，基于 Apple 的 Core Audio Process Tap API 自行实现频谱分析与动画驱动，未使用第三方代码。
+- **音效引擎**（播放、峰值限制、按键分类）移植自 KeyFoley 的 `Sources/KeyFoley/Sound/` 模块，并针对 KuroCat 的 `PhysicalKey` 做了适配；音效样本为 KeyFoley 内置的那 7 套主题。macOS 使用 AVAudioEngine，Windows 使用 WASAPI 渲染客户端，两边共用同一套样本与分类逻辑。
+- **音乐律动**为本项目新增：macOS 基于 Core Audio Process Tap，Windows 基于 WASAPI Loopback；两端使用相同的级联滤波器、节拍检测与峰值帽参数，未使用第三方代码。
+- **Windows 原生端口**位于 `windows/src/`，使用 C++17 / Win32 / GDI+ / Raw Input 实现，与 Swift 版共享设计但为 Windows API 重写，不是模拟器或 Web 包装。
 
 ## 📄 许可与归属
 

@@ -4,6 +4,7 @@
 #include <objidl.h>
 #include <gdiplus.h>
 #include <cmath>
+#include <memory>
 #include <vector>
 #include <algorithm>
 #include "CatPhysics.hpp"
@@ -22,7 +23,8 @@ public:
         float cx = CatPhysics::SeatAnchor.x + physics.bodyShiftX.value;
         float breath = std::sin(physics.time * 2.1f) * 1.6f;
         Pt headCenter = { cx + physics.bodyTilt.value * 36.0f + physics.headYaw.value * 7.5f,
-                          126.0f + physics.headOffsetY.value + physics.headPitch.value * 4.8f + breath * 1.1f };
+                          126.0f + physics.headOffsetY.value + physics.headPitch.value * 4.8f
+                              + breath * 1.1f - physics.musicBounce };
 
         float hdx = (p.x - headCenter.x) / 48.0f;
         float hdy = (p.y - headCenter.y) / 42.0f;
@@ -48,7 +50,8 @@ public:
 
         Pt headCenter = {
             seatX + physics.bodyTilt.value * 36.0f + physics.headYaw.value * 7.5f,
-            126.0f + physics.headOffsetY.value + physics.headPitch.value * 4.8f + breath * 1.1f
+            126.0f + physics.headOffsetY.value + physics.headPitch.value * 4.8f
+                + breath * 1.1f - physics.musicBounce
         };
 
         // 1. Mini White Mouse (facing cat)
@@ -56,6 +59,11 @@ public:
 
         // 2. Mini 65% Mechanical Keyboard (facing cat) + Backlit Glow
         drawKeyboard(g, physics, settings.keyboardTheme, settings.eyeTheme);
+
+        // 2.6 Music pickup / spectrum bars (behind tail and body)
+        if (physics.equalizerPresence > 0.01f) {
+            drawMusicEqualizer(g, physics, settings.eyeTheme);
+        }
 
         // 3. Tail
         drawTail(g, seatX, seatY, physics, settings.coatTheme);
@@ -82,8 +90,16 @@ public:
             drawFloatingKeycaps(g, physics);
         }
 
+        // 9.5 Floating music notes (hidden while fried — dazed face wins)
+        if (!physics.musicNotes.empty() && !physics.isFried) {
+            drawMusicNotes(g, physics, settings.eyeTheme);
+        }
+
         // 10. Subtle Petting Sparkles & Sleep Z
         drawSparkles(g, physics, settings.eyeTheme);
+
+        // 10b. Fried steam wisps, drawn last so they hover above the head
+        drawSmoke(g, physics);
     }
 
 private:
@@ -157,6 +173,94 @@ private:
         float mt = 1.0f - t;
         return { 2.0f * mt * (p1.x - p0.x) + 2.0f * t * (p2.x - p1.x),
                  2.0f * mt * (p1.y - p0.y) + 2.0f * t * (p2.y - p1.y) };
+    }
+
+    static Gdiplus::Color withAlpha(Gdiplus::Color c, float alpha) {
+        return Gdiplus::Color((BYTE)std::clamp(alpha * 255.0f, 0.0f, 255.0f), c.GetR(), c.GetG(), c.GetB());
+    }
+
+    // MARK: - Music Pickup / Spectrum Bars
+
+    /// Six glowing note-capsules to the right of the cat, driven by the live
+    /// 6-band spectrum. Mirrors drawMusicEqualizer in CatRenderer.swift.
+    static void drawMusicEqualizer(Gdiplus::Graphics& g, const CatPhysics& physics, EyeColorTheme eyeTheme) {
+        using namespace Gdiplus;
+        float fade = std::clamp(physics.equalizerPresence, 0.0f, 1.0f);
+        if (fade <= 0.001f) return;
+        Color accent = eyePrimary(eyeTheme);
+        constexpr float barW = 9.0f;
+        constexpr float gap = 5.0f;
+        constexpr float originX = 250.0f;
+        constexpr float baseY = 188.0f;
+        constexpr float maxH = 100.0f;
+
+        for (int i = 0; i < MusicPulse::BandCount; ++i) {
+            float x = originX + (float)i * (barW + gap);
+            float raw = std::clamp(physics.pulse.bands[i], 0.0f, 1.0f);
+            float value = std::min(1.0f, (float)std::pow(raw, 0.52) + (float)physics.pulse.beat * 0.16f);
+            float h = std::max(13.0f, value * maxH);
+
+            // Soft halo behind the capsule.
+            GraphicsPath glow;
+            addRoundedRect(glow, x - 2.5f, baseY - h - 2.5f, barW + 5.0f, h + 5.0f, (barW + 5.0f) * 0.5f);
+            SolidBrush glowBrush(withAlpha(accent, 0.10f * fade));
+            g.FillPath(&glowBrush, &glow);
+
+            // Rounded capsule, brighter toward the tip.
+            GraphicsPath capsule;
+            addRoundedRect(capsule, x, baseY - h, barW, h, barW * 0.5f);
+            Color top = withAlpha(accent, 0.90f * fade);
+            Color bottom = withAlpha(accent, 0.40f * fade);
+            LinearGradientBrush gradient(RectF(x, baseY - h, barW, h), top, bottom, LinearGradientModeVertical);
+            g.FillPath(&gradient, &capsule);
+
+            // Slow-falling peak cap.
+            float peakRaw = std::clamp(physics.pulse.peaks[i], 0.0f, 1.0f);
+            float peakValue = std::min(1.0f, (float)std::pow(peakRaw, 0.52) + (float)physics.pulse.beat * 0.16f);
+            float peakY = baseY - std::max(peakValue * maxH, h + 3.0f);
+            Color tint((BYTE)(accent.GetR() * 0.55f), (BYTE)(accent.GetG() * 0.55f), (BYTE)(accent.GetB() * 0.55f));
+            SolidBrush peakBrush(withAlpha(tint, 0.75f * fade));
+            g.FillRectangle(&peakBrush, x + 1.0f, peakY, barW - 2.0f, 2.0f);
+
+            // Tiny light hovering at the tip.
+            float beadR = 1.8f + value * 1.2f + (float)physics.pulse.beat * 0.9f;
+            float beadCY = peakY - beadR - 1.0f;
+            SolidBrush beadBrush(withAlpha(accent, 0.95f * fade));
+            g.FillEllipse(&beadBrush, x + barW * 0.5f - beadR, beadCY - beadR, beadR * 2.0f, beadR * 2.0f);
+        }
+    }
+
+    // MARK: - Floating Music Notes
+
+    static void drawMusicNotes(Gdiplus::Graphics& g, const CatPhysics& physics, EyeColorTheme eyeTheme) {
+        using namespace Gdiplus;
+        static const wchar_t* glyphs[4] = { L"\u266A", L"\u266B", L"\u2669", L"\u266C" };
+        // GDI+ FontFamily has no public assignment operator, so hold it by pointer.
+        std::unique_ptr<FontFamily> family(new FontFamily(L"Segoe UI Symbol"));
+        if (!family->IsAvailable()) family.reset(new FontFamily(L"Arial Unicode MS"));
+        Font font(family.get(), 20.0f, FontStyleRegular, UnitPixel);
+        StringFormat format;
+        format.SetAlignment(StringAlignmentCenter);
+        format.SetLineAlignment(StringAlignmentCenter);
+        Color accent = eyePrimary(eyeTheme);
+
+        for (const auto& note : physics.musicNotes) {
+            float progress = std::clamp(note.age / note.lifetime, 0.0f, 1.0f);
+            float alpha = (float)std::sin(progress * 3.14159265f) * 0.92f;
+            if (alpha <= 0.01f) continue;
+            float popScale = progress < 0.12f ? (0.7f + 0.3f * (progress / 0.12f)) : 1.0f;
+            float scale = note.scale * popScale;
+
+            GraphicsState st = g.Save();
+            g.TranslateTransform(note.position.x, note.position.y);
+            float angle = note.rotation + (float)std::sin(progress * 6.2831853f) * 0.12f;
+            g.RotateTransform(angle * RadToDeg);
+            g.ScaleTransform(scale, scale);
+            SolidBrush brush(withAlpha(accent, alpha));
+            RectF layout(-22.0f, -22.0f, 44.0f, 44.0f);
+            g.DrawString(glyphs[note.glyph % 4], -1, &font, layout, &format, &brush);
+            g.Restore(st);
+        }
     }
 
     // MARK: - Mini White Mouse (180° facing the cat)
@@ -513,7 +617,112 @@ private:
 
         drawEye3D(g, true, yawRad, pitchRad, physics, eyeTheme, coat);
         drawEye3D(g, false, yawRad, pitchRad, physics, eyeTheme, coat);
+
+        if (physics.isFried || physics.isStraining()) {
+            drawOverloadMouth(g, yawRad, pitchRad, physics, coat);
+        }
+        if (physics.isStraining() && physics.strainTier() >= 3) {
+            drawStrainExtras(g, yawRad, pitchRad, physics, eyeTheme);
+        }
+
         drawWhiskers3D(g, yawRad, pitchRad, physics, coat);
+        g.Restore(st);
+    }
+
+    /// Small centred mouth: tight line / gritted teeth / bared fangs / dazed squiggle.
+    static void drawOverloadMouth(Gdiplus::Graphics& g, float yawRad, float pitchRad,
+                                  const CatPhysics& physics, CatCoatTheme coat) {
+        using namespace Gdiplus;
+        Pt proj = projectHead3D(0.0f, 12.5f, 29.0f, yawRad, pitchRad);
+        Color ink = coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack();
+        GraphicsState st = g.Save();
+        g.TranslateTransform(proj.x, proj.y);
+
+        if (physics.isFried) {
+            GraphicsPath path;
+            addQuadBezier(path, {-5.5f, 0.0f}, {-3.6f, -0.8f}, {-1.8f, 1.6f});
+            addQuadBezier(path, {-1.8f, 1.6f}, {0.0f, 2.6f}, {1.8f, 0.2f});
+            addQuadBezier(path, {1.8f, 0.2f}, {3.6f, -1.0f}, {5.5f, 1.4f});
+            Pen pen(Color(216, 158, 168, 153), 1.5f);
+            pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+            g.DrawPath(&pen, &path);
+        } else {
+            int tier = physics.strainTier();
+            if (tier <= 1) {
+                GraphicsPath path;
+                addQuadBezier(path, {-5.0f, 0.0f}, {0.0f, -1.0f}, {5.0f, 0.0f});
+                Pen pen(ink, 1.8f);
+                pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+                g.DrawPath(&pen, &path);
+            } else {
+                bool fangs = tier >= 3;
+                float halfW = fangs ? 8.0f : 6.5f;
+                float barH = fangs ? 5.4f : 4.4f;
+                SolidBrush dark(ink);
+                g.FillRectangle(&dark, -halfW, -2.0f, halfW * 2.0f, barH);
+                SolidBrush white(Color(239, 242, 242, 240));
+                float step = fangs ? 3.0f : 2.6f;
+                for (float x = -halfW + 1.3f; x < halfW - 1.3f; x += step) {
+                    if (fangs) {
+                        PointF tri[3] = {
+                            {x - 0.9f, -1.8f}, {x + 0.9f, -1.8f}, {x, -4.4f}
+                        };
+                        g.FillPolygon(&white, tri, 3);
+                    } else {
+                        g.FillRectangle(&white, x - 0.85f, -1.8f, 1.7f, 1.9f);
+                    }
+                }
+                GraphicsPath lip;
+                addQuadBezier(lip, {-halfW - 0.5f, 3.2f}, {0.0f, fangs ? 0.8f : 1.6f}, {halfW + 0.5f, 3.2f});
+                Pen pen(ink, fangs ? 1.6f : 1.2f);
+                g.DrawPath(&pen, &lip);
+            }
+        }
+        g.Restore(st);
+    }
+
+    /// Tier-3 only: comic anger vein and a flying sweat drop.
+    static void drawStrainExtras(Gdiplus::Graphics& g, float yawRad, float pitchRad,
+                                 const CatPhysics& physics, EyeColorTheme eyeTheme) {
+        using namespace Gdiplus;
+        Color accent = eyePrimary(eyeTheme);
+        float jitter = std::sin(physics.time * 34.0f) * 0.8f;
+
+        Pt vein = projectHead3D(22.0f, -34.0f, 20.0f, yawRad, pitchRad);
+        GraphicsState st = g.Save();
+        g.TranslateTransform(vein.x, vein.y + jitter);
+        g.RotateTransform((-0.18f + std::sin(physics.time * 9.0f) * 0.06f) * RadToDeg);
+        Pen pen(accent, 2.2f);
+        pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+        PointF diamond[4] = { {0, -3.2f}, {3.2f, 0}, {0, 3.2f}, {-3.2f, 0} };
+        g.DrawPolygon(&pen, diamond, 4);
+        const float rays[5][4] = {
+            {-6.0f, -6.0f, -3.2f, -3.2f}, {6.0f, -6.0f, 3.2f, -3.2f},
+            {-6.0f, 6.0f, -3.2f, 3.2f}, {6.0f, 6.0f, 3.2f, 3.2f},
+            {0.0f, -8.2f, 0.0f, -4.6f}
+        };
+        for (const auto& r : rays) {
+            PointF line[2] = { {r[0], r[1]}, {r[2], r[3]} };
+            g.DrawLines(&pen, line, 2);
+        }
+        g.Restore(st);
+
+        Pt sweat = projectHead3D(-34.0f, -26.0f, 16.0f, yawRad, pitchRad);
+        float fly = std::sin(physics.time * 12.0f) * 1.6f;
+        st = g.Save();
+        g.TranslateTransform(sweat.x - 3.0f + fly, sweat.y - 2.0f);
+        g.RotateTransform(-0.28f * RadToDeg);
+        GraphicsPath drop;
+        drop.AddLine(0.0f, -5.5f, 0.0f, -5.5f);
+        addQuadBezier(drop, {0.0f, -5.5f}, {3.6f, -3.0f}, {4.0f, 1.5f});
+        addQuadBezier(drop, {4.0f, 1.5f}, {4.4f, 5.2f}, {0.0f, 5.5f});
+        addQuadBezier(drop, {0.0f, 5.5f}, {-4.4f, 5.2f}, {-4.0f, 1.5f});
+        addQuadBezier(drop, {-4.0f, 1.5f}, {-3.6f, -3.0f}, {0.0f, -5.5f});
+        drop.CloseFigure();
+        SolidBrush dropBrush(Color(235, 158, 214, 240));
+        g.FillPath(&dropBrush, &drop);
+        SolidBrush shine(Color(255, 255, 255, 255));
+        g.FillEllipse(&shine, -1.6f, 0.4f, 1.8f, 2.4f);
         g.Restore(st);
     }
 
@@ -530,6 +739,78 @@ private:
         GraphicsState st = g.Save();
         g.TranslateTransform(proj.x, proj.y);
         g.ScaleTransform(foreX, foreY);
+
+        Color faceInk = coat == CatCoatTheme::Siamese ? siamesePoint() : catBlack();
+
+        // Mode -1: FRIED / DAZED — vacant half-lidded eyes, drifting pupils.
+        if (physics.isFried) {
+            SolidBrush dim(withAlpha(eyeCol, 0.5f));
+            g.FillEllipse(&dim, -11.6f, -7.8f, 23.2f, 15.6f);
+
+            float drift = std::sin((float)physics.time * 1.7f + (isLeft ? 0.0f : 2.3f)) * 1.8f;
+            float px = (isLeft ? -2.8f : 2.6f) + drift;
+            float py = 3.0f + std::cos((float)physics.time * 1.3f + (isLeft ? 0.5f : 2.0f)) * 0.9f;
+            SolidBrush ink(faceInk);
+            g.FillEllipse(&ink, px - 2.2f, py - 2.4f, 4.4f, 4.8f);
+
+            GraphicsPath lid;
+            lid.AddLine(-12.6f, 7.8f, -12.6f, 0.5f);
+            addQuadBezier(lid, {-12.6f, 0.5f}, {0.0f, -2.2f}, {12.6f, 0.5f});
+            lid.AddLine(12.6f, 0.5f, 12.6f, 7.8f);
+            lid.CloseFigure();
+            g.FillPath(&ink, &lid);
+
+            GraphicsPath crease;
+            addQuadBezier(crease, {-10.8f, 0.5f}, {0.0f, -1.8f}, {10.8f, 0.5f});
+            Pen creasePen(withAlpha(eyeCol, 0.55f), 1.4f);
+            creasePen.SetStartCap(LineCapRound); creasePen.SetEndCap(LineCapRound);
+            g.DrawPath(&creasePen, &crease);
+            g.Restore(st);
+            return;
+        }
+
+        // Mode 0: STRAINING — three escalating tiers of effort.
+        if (physics.isStraining()) {
+            int tier = physics.strainTier();
+            float w1 = tier == 1 ? 1.0f : (tier == 2 ? 0.55f : 0.3f);
+            float w2 = tier == 2 ? 1.0f : (tier == 3 ? 0.6f : 0.0f);
+            float w3 = tier == 3 ? 1.0f : 0.0f;
+            float halfH = tier == 3 ? 3.6f : (8.8f - 2.2f * w1 - 1.8f * w2);
+            SolidBrush iris(eyeCol);
+            g.FillEllipse(&iris, -12.2f, -halfH, 24.4f, halfH * 2.0f);
+
+            Pt gazePt = physics.eyeGaze.point();
+            float px = gazePt.x * (3.0f - 1.0f * w3);
+            float pupilW = 4.6f - 1.6f * w2 - 0.9f * w3;
+            float pupilH = halfH * 1.7f;
+            SolidBrush ink(faceInk);
+            g.FillEllipse(&ink, px - pupilW * 0.5f, -pupilH * 0.5f, pupilW, pupilH);
+
+            float topSqueeze = 2.4f + 1.8f * w1 + 1.6f * w2 + 1.4f * w3;
+            g.FillRectangle(&ink, -12.6f, -halfH - 0.8f, 25.2f, topSqueeze);
+
+            GraphicsPath brow;
+            float innerX = isLeft ? 9.5f : -9.5f;
+            float outerX = isLeft ? -11.0f : 11.0f;
+            float outerY = tier == 3 ? -9.4f : (-10.6f - 1.4f * w1 - 1.3f * w2);
+            float innerY = tier == 3 ? -6.6f : (-7.8f - 2.2f * w1 - 2.3f * w2);
+            addQuadBezier(brow, {outerX, outerY}, {(outerX + innerX) * 0.5f, outerY - 0.5f}, {innerX, innerY});
+            Pen browPen(withAlpha(eyeCol, 0.72f + 0.1f * w3), tier == 3 ? 4.6f : (2.2f + 0.5f * w2));
+            browPen.SetStartCap(LineCapRound); browPen.SetEndCap(LineCapRound);
+            g.DrawPath(&browPen, &brow);
+
+            if (tier >= 3) {
+                float cornerX = isLeft ? -13.5f : 13.5f;
+                Pen tickPen(withAlpha(eyeCol, 0.75f), 1.1f);
+                for (int k = 0; k < 2; ++k) {
+                    float yy = -3.0f - (float)k * 3.4f;
+                    PointF line[2] = { {cornerX, yy}, {cornerX + (isLeft ? -3.6f : 3.6f), yy - 2.0f} };
+                    g.DrawLines(&tickPen, line, 2);
+                }
+            }
+            g.Restore(st);
+            return;
+        }
 
         // Mode 1: Happy closed glowing curved line eyes (petting head!)
         if (physics.isHappyClosedEyes()) {
@@ -826,6 +1107,57 @@ private:
     }
 
     // MARK: - Petting Sparkles & Sleep Z
+
+    // MARK: - Overload Smoke (rising wisps above the head)
+
+    static void drawSmoke(Gdiplus::Graphics& g, const CatPhysics& physics) {
+        using namespace Gdiplus;
+        if (physics.smokePuffs.empty()) return;
+        Color ink(87, 94, 102); // #575E66 with variable alpha below
+
+        for (const auto& puff : physics.smokePuffs) {
+            float p = std::clamp(puff.age / puff.lifetime, 0.0f, 1.0f);
+            float alpha = (float)std::sin(std::min(1.0f, p * 1.1f) * 3.14159265f) * 0.62f * (1.0f - p * 0.25f);
+            if (alpha <= 0.01f) continue;
+
+            Pen pen(withAlpha(ink, alpha), 1.6f + p * 0.7f);
+            pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound); pen.SetLineJoin(LineJoinRound);
+
+            float len = 15.0f + p * 15.0f + puff.radius * 0.5f;
+            float amp = 4.2f + p * 3.2f;
+            float sway = std::sin(p * 3.6f + puff.seed) * 2.6f;
+            float x0 = puff.position.x + sway;
+            float y0 = puff.position.y;
+            float topX = x0 + std::sin(puff.seed) * amp;
+            float topY = y0 - len * 0.5f;
+
+            GraphicsPath wisp;
+            wisp.AddBezier(Gdiplus::PointF(x0, y0 + len * 0.5f),
+                           Gdiplus::PointF(x0 - amp, y0 + len * 0.12f),
+                           Gdiplus::PointF(x0 + amp, y0 - len * 0.12f),
+                           Gdiplus::PointF(topX, topY));
+            g.DrawPath(&pen, &wisp);
+
+            // About half the wisps end in a tightening spiral curl.
+            if (puff.seed > 3.1f) {
+                GraphicsPath spiral;
+                float angle = 0.0f;
+                float radius = 4.2f + p * 1.2f;
+                float lastX = topX + radius;
+                float lastY = topY;
+                for (int i = 0; i < 20; ++i) {
+                    angle += 0.5f;
+                    radius *= 0.90f;
+                    float nextX = topX + std::cos(angle) * radius;
+                    float nextY = topY + std::sin(angle) * radius;
+                    spiral.AddLine(lastX, lastY, nextX, nextY);
+                    lastX = nextX;
+                    lastY = nextY;
+                }
+                g.DrawPath(&pen, &spiral);
+            }
+        }
+    }
 
     static void drawSparkles(Gdiplus::Graphics& g, const CatPhysics& physics, EyeColorTheme eyeTheme) {
         using namespace Gdiplus;

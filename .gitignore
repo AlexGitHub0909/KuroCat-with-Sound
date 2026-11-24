@@ -5,6 +5,14 @@ build/
 *.o
 *.swiftmodule
 
+# Windows build outputs
+*.obj
+*.exe
+*.pdb
+*.ilk
+windows/SoundThemes/
+windows/dist/KuroCat-Windows-x64/
+
 # macOS
 .DS_Store
 *.swp
